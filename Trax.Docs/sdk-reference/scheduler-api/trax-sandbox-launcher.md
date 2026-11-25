@@ -95,7 +95,8 @@ On start, before it listens:
 
 1. It refuses any configuration `Validate()` refuses.
 2. It removes whatever an earlier launcher process left behind: containers and volumes labelled
-   `trax.sandbox.launcher` on podman, its Jobs and run directories on a cluster.
+   `trax.sandbox.launcher` on podman, its Jobs and run directories on a cluster. A run directory
+   it cannot remove is logged and left, rather than stopping the start.
 3. It runs the canary: one sandbox under the configured runtime, with `canary.json` in place of a
    request. The sandbox reports its kernel and tries to connect to the metadata endpoints
    (169.254.169.254, 169.254.170.23, 169.254.170.2, fd00:ec2::254), addresses off the host, the

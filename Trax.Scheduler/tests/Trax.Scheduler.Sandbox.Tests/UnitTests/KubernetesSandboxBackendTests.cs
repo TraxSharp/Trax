@@ -41,7 +41,56 @@ public class KubernetesSandboxBackendTests
     }
 
     [TearDown]
-    public void TearDown() => Directory.Delete(_runs, recursive: true);
+    public void TearDown()
+    {
+        if (!OperatingSystem.IsWindows())
+            foreach (
+                var directory in Directory.EnumerateDirectories(
+                    _runs,
+                    "*",
+                    new EnumerationOptions
+                    {
+                        RecurseSubdirectories = true,
+                        IgnoreInaccessible = true,
+                    }
+                )
+            )
+                File.SetUnixFileMode(directory, (UnixFileMode)0b111_000_000);
+        Directory.Delete(_runs, recursive: true);
+    }
+
+    /// <summary>Root removes a read-only directory anyway; CI runs the tests as a normal user.</summary>
+    private static void AsANormalUser()
+    {
+        if (OperatingSystem.IsWindows() || Environment.IsPrivilegedProcess)
+            Assert.Ignore(
+                "Only a process without root's override can find a directory it cannot empty."
+            );
+    }
+
+    [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
+    private static void ReadOnly(string directory) =>
+        File.SetUnixFileMode(directory, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+
+    private async Task SweepAsync(FakeKubernetes api)
+    {
+        var options = LauncherOptions.Kubernetes();
+        options.Kubernetes.RunsPath = _runs;
+        options.Kubernetes.PollInterval = TimeSpan.FromMilliseconds(10);
+        using var client = new Kubernetes(
+            new KubernetesClientConfiguration { Host = "http://cluster" },
+            api
+        );
+        await new KubernetesSandboxBackend(
+            client,
+            options,
+            _clock,
+            NullLogger<KubernetesSandboxBackend>.Instance,
+            _ => (_available, 100)
+        )
+            .SweepAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+    }
 
     private async Task<SandboxExecution> RunAsync(
         FakeKubernetes api,
@@ -309,5 +358,40 @@ public class KubernetesSandboxBackendTests
 
         total.Should().BePositive();
         available.Should().BeInRange(0, total);
+    }
+
+    [Test]
+    public async Task RunAsync_ADirectoryTheSandboxMadeReadOnly_IsStillRemoved()
+    {
+        AsANormalUser();
+        var api = new FakeKubernetes(_runs) { RunningPolls = 1 };
+        api.OnPoll = async poll =>
+        {
+            if (poll == 1 && !OperatingSystem.IsWindows())
+            {
+                await WriteAsync(OutputOf("files/x/f"), 1).ConfigureAwait(false);
+                ReadOnly(OutputOf("files/x"));
+            }
+        };
+
+        await RunAsync(api);
+
+        Directory.Exists(Path.Combine(_runs, RunId)).Should().BeFalse();
+    }
+
+    [Test]
+    public async Task SweepAsync_ARunDirectoryTheSandboxMadeReadOnly_IsRemovedAndTheStartGoesOn()
+    {
+        AsANormalUser();
+        await WriteAsync(OutputOf("x/f"), 1);
+        if (!OperatingSystem.IsWindows())
+            ReadOnly(OutputOf("x"));
+        var other = Path.Combine(_runs, "lost+found");
+        Directory.CreateDirectory(other);
+
+        await SweepAsync(new FakeKubernetes(_runs));
+
+        Directory.Exists(Path.Combine(_runs, RunId)).Should().BeFalse();
+        Directory.Exists(other).Should().BeTrue("only a run's directory is the launcher's");
     }
 }

@@ -131,15 +131,59 @@ internal sealed class KubernetesSandboxBackend(
     /// <summary>Removes the run's Job and directory, on an uncancellable token: a run whose caller gave up must not leave either behind.</summary>
     private async Task CleanUpAsync(string name, string run)
     {
-        await QuietlyAsync(() => DeleteAndWaitAsync(name, CancellationToken.None))
-            .ConfigureAwait(false);
-        await QuietlyAsync(() =>
+        // The directory only once the pod is gone: until then the sandbox can still change it
+        // under the walk that removes it.
+        if (
+            await QuietlyAsync(() => DeleteAndWaitAsync(name, CancellationToken.None))
+                .ConfigureAwait(false)
+        )
+            await QuietlyAsync(() =>
+                {
+                    RemoveRun(run);
+                    return Task.CompletedTask;
+                })
+                .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Removes a run's directory, first giving the launcher write and search on every real
+    /// directory in it, since the sandbox may have left one it made read-only. Never follows a link.
+    /// </summary>
+    internal static void RemoveRun(string run)
+    {
+        if (!Directory.Exists(run))
+            return;
+        if (!OperatingSystem.IsWindows())
+            Unlock(new DirectoryInfo(run));
+        Directory.Delete(run, recursive: true);
+    }
+
+    [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
+    private static void Unlock(DirectoryInfo root)
+    {
+        const UnixFileMode Owner =
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
+        var options = new EnumerationOptions
+        {
+            RecurseSubdirectories = false,
+            AttributesToSkip = FileAttributes.None,
+            IgnoreInaccessible = true,
+        };
+        var pending = new Stack<DirectoryInfo>();
+        pending.Push(root);
+        while (pending.Count > 0)
+        {
+            var directory = pending.Pop();
+            try
             {
-                if (Directory.Exists(run))
-                    Directory.Delete(run, recursive: true);
-                return Task.CompletedTask;
-            })
-            .ConfigureAwait(false);
+                // One the launcher does not own stays as it is, and the delete then says so.
+                directory.UnixFileMode |= Owner;
+                foreach (var sub in directory.EnumerateDirectories("*", options))
+                    if (sub.LinkTarget is null)
+                        pending.Push(sub);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        }
     }
 
     private static async Task PrepareAsync(string run, SandboxJob job, CancellationToken ct)
@@ -315,18 +359,32 @@ internal sealed class KubernetesSandboxBackend(
         // Only directories named as a run is: a misconfigured RunsPath must not cost anything else.
         foreach (var run in Directory.EnumerateDirectories(Kube.RunsPath))
             if (IsRunDirectory(Path.GetFileName(run)))
-                Directory.Delete(run, recursive: true);
+                try
+                {
+                    RemoveRun(run);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // A directory left behind costs its space, not every later start.
+                    logger.LogWarning(
+                        ex,
+                        "The sandbox run directory {Run} could not be removed; it is left in place.",
+                        run
+                    );
+                }
     }
 
     /// <summary>Whether <paramref name="name"/> is a run id, 32 lowercase hex characters.</summary>
     internal static bool IsRunDirectory(string name) =>
         name.Length == 32 && name.All(c => char.IsAsciiDigit(c) || c is >= 'a' and <= 'f');
 
-    private async Task QuietlyAsync(Func<Task> step)
+    /// <summary>Runs <paramref name="step"/>, logging a failure to remove something; whether it succeeded.</summary>
+    private async Task<bool> QuietlyAsync(Func<Task> step)
     {
         try
         {
             await step().ConfigureAwait(false);
+            return true;
         }
         catch (Exception ex)
             when (ex
@@ -340,6 +398,7 @@ internal sealed class KubernetesSandboxBackend(
                 ex,
                 "A sandbox resource could not be removed; the next start sweeps it."
             );
+            return false;
         }
     }
 }
