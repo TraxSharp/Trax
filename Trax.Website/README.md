@@ -147,6 +147,15 @@ gives the commands to start it.
 Re-record a sample with its script's `--copy-to ../../../Trax.Website/src/data`, from a sibling Trax.Samples
 checkout, when the sample changes; `npm test` plays every recording through its player.
 
+The home page's deploy section (`ShipIt.tsx`) works the same way on real `trax deploy` runs. Its front is one release
+as a moving picture (`ReleaseStory.tsx`, `src/lib/release-story.ts`), read off the recorded Hub + Workers run on
+Kubernetes with the clock shortened; AWS is simulated there, from the steps the ECS deploy takes, and labelled so.
+Every recorded deploy is in the fold under it (`DeployReplay.tsx`): `src/data/deploy-recordings.json` holds what the CLI printed, every pod or container, a health probe five times a
+second and the network checks, for each shape an app can take on k3s and on podman. Trax.Samples'
+`scripts/recordings/deploy.sh` records them in a throwaway VM and `deploy.mjs` writes the file;
+`scripts/recordings/deploy/README.md` says how to make the VM. `tests/deploy-replay.test.ts` and `tests/release-story.test.ts` check every claim
+the section makes against the recording, and that the simulated AWS picture is never counted as recorded.
+
 ## The dashboard
 
 The **Dashboard** tab serves the operations dashboard on recordings of three sample hosts (Scheduling, Recovery and
