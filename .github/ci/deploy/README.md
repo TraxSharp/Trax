@@ -1,7 +1,7 @@
 # Deploy proof
 
-`trax deploy` run for real, not against a fake: `cluster.sh` on a Kubernetes cluster and `podman.sh` with the
-podman runtime under systemd. Together they are the `deploy-cluster` CI job, which installs k3s on the runner
+`trax deploy` run for real, not against a fake: `cluster.sh` on a Kubernetes cluster, `podman.sh` with the
+podman runtime under systemd and `compose.sh` as a compose stack. The first two are the `deploy-cluster` CI job, which installs k3s on the runner
 (`K8S=k3s`). Elsewhere `cluster.sh` uses the current kubeconfig context and the registry in `TRAX_CI_REGISTRY`,
 which is how the same checks run against k3s in a VM.
 
@@ -49,6 +49,16 @@ What `podman.sh` proves:
    neither the hub nor the worker is restarted until the run ends; then only they restart, Postgres and RabbitMQ keep
    running, the run is left as it was ended and the drain is ended. The podman runtime has no overlap, so the hub is
    down for its restart; that is not measured here.
+
+What `compose.sh` proves (`ENGINE=docker` by default, `ENGINE=podman` for podman compose):
+
+1. the release `trax deploy` prints for compose (`compose up -d migrate drain && compose wait drain && compose up
+   -d`), run as printed, brings up a healthy hub and workers that finish a run of the hub's schedule;
+2. a release of rebuilt images, run as printed with a run InProgress, keeps the old hub and workers running while the
+   drain reports the run busy, then replaces them once it ends, leaves the run as it was ended, ends the drain, and
+   leaves Postgres and RabbitMQ running.
+
+No CI job runs `compose.sh` yet.
 
 `podman kube play` runs one copy of a Deployment, so the sample's two workers are one under podman. The egress is not
 proved under podman here: the script builds no egress image into podman.
