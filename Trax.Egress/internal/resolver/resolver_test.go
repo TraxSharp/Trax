@@ -85,6 +85,24 @@ func TestAllowedNameIsForwardedAsAFreshQuery(t *testing.T) {
 	}
 }
 
+func TestTheUpstreamQuestionIsLowerCase(t *testing.T) {
+	up := &fakeUpstream{}
+	r, _ := newResolver(up)
+	q := query(0xBEEF, "aPi.AnTHropIC.cOm", TypeA)
+	resp := r.Answer(context.Background(), q, true)
+	if resp == nil || rcode(resp) != RcodeOK {
+		t.Fatalf("answer %v", resp)
+	}
+	sent := up.sent[0]
+	if want := query(0, "api.anthropic.com", TypeA)[headerLen:]; string(sent[headerLen:]) != string(want) {
+		t.Errorf("the letter case the app chose went upstream: %q", sent[headerLen:])
+	}
+	// The app gets its own question back, as any resolver answers it.
+	if got := resp[headerLen:len(q)]; string(got) != string(q[headerLen:]) {
+		t.Errorf("the answer's question is %q, not the app's", got)
+	}
+}
+
 func TestShortNameUnderASearchDomain(t *testing.T) {
 	up := &fakeUpstream{}
 	r, _ := newResolver(up)

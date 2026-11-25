@@ -1,7 +1,7 @@
 // Package resolver is the pod's only way to resolve a name. It answers an A query for a name on the allowlist by
 // asking the pod's upstream, and every other name with NXDOMAIN, so an unlisted name does not resolve and a name
 // made of data (DNS tunnelling) never leaves the pod. It forwards no query as it was sent: it builds a fresh one
-// holding only the name and the type, so nothing else the app put in its query reaches the upstream.
+// holding only the name, in lower case, and the type, so nothing else the app put in its query reaches the upstream.
 package resolver
 
 import (
@@ -164,7 +164,23 @@ func Reply(id uint16, rd bool, q Question, rcode int) []byte {
 	return append(msg, q.Raw...)
 }
 
-// NewQuery builds the query sent upstream: a fresh id, recursion desired, the one question and nothing else.
+// lower returns the question section raw with its labels in lower case, so the letter case the app chose (which
+// could carry a bit a letter) does not reach the upstream. Lowering keeps every length, so the section is the
+// same size.
+func lower(raw []byte) []byte {
+	out := append([]byte(nil), raw...)
+	for off := 0; off < len(out) && out[off] != 0; off += 1 + int(out[off]) {
+		for i := off + 1; i <= off+int(out[off]) && i < len(out); i++ {
+			if out[i] >= 'A' && out[i] <= 'Z' {
+				out[i] |= 0x20
+			}
+		}
+	}
+	return out
+}
+
+// NewQuery builds the query sent upstream: a fresh id, recursion desired, the one question in lower case and
+// nothing else.
 func NewQuery(q Question) ([]byte, uint16, error) {
 	var idb [2]byte
 	if _, err := rand.Read(idb[:]); err != nil {
@@ -175,7 +191,7 @@ func NewQuery(q Question) ([]byte, uint16, error) {
 	binary.BigEndian.PutUint16(msg[0:2], id)
 	binary.BigEndian.PutUint16(msg[2:4], 0x0100)
 	binary.BigEndian.PutUint16(msg[4:6], 1)
-	return append(msg, q.Raw...), id, nil
+	return append(msg, lower(q.Raw)...), id, nil
 }
 
 // Answer is the reply to one query, or nil when the query gets none (it was malformed or was itself a reply).
@@ -210,6 +226,8 @@ func (r *Resolver) Answer(ctx context.Context, query []byte, udp bool) []byte {
 	}
 	resp = append([]byte(nil), resp...)
 	binary.BigEndian.PutUint16(resp[0:2], id)
+	// The app gets its own question back, letter case and all, as from any resolver.
+	copy(resp[headerLen:], q.Raw)
 	if udp && len(resp) > MaxUDP {
 		cut := Reply(id, rd, q, int(binary.BigEndian.Uint16(resp[2:4])&0xF))
 		binary.BigEndian.PutUint16(cut[2:4], binary.BigEndian.Uint16(cut[2:4])|0x0200)
@@ -228,5 +246,6 @@ func answers(resp []byte, id uint16, q Question) bool {
 		return false
 	}
 	got, _, err := parseQuestion(resp, headerLen)
-	return err == nil && got.Name == q.Name && got.Type == q.Type && got.Class == q.Class
+	return err == nil && got.Name == q.Name && got.Type == q.Type && got.Class == q.Class &&
+		string(lower(got.Raw)) == string(lower(q.Raw))
 }
