@@ -469,6 +469,164 @@ public class KubernetesDeployClientRolloutTests
         reads.Should().Be(2);
     }
 
+    [Test]
+    public async Task A_forward_roll_reports_the_broken_pod_of_its_newest_ReplicaSet_at_once()
+    {
+        // Revision 3 is this deploy's ReplicaSet; its pod cannot pull its image while revision 2's still runs.
+        var api = new StubKubernetesApi()
+            .On(
+                "GET",
+                $"/apis/apps/v1/namespaces/{Ns}/deployments/hub/status",
+                HttpStatusCode.OK,
+                RollingHub
+            )
+            .On(
+                "GET",
+                $"/apis/apps/v1/namespaces/{Ns}/replicasets",
+                HttpStatusCode.OK,
+                ForwardReplicaSets
+            )
+            .On("GET", $"/api/v1/namespaces/{Ns}/pods", HttpStatusCode.OK, PodsOfBothSpecs)
+            .On("GET", $"/api/v1/namespaces/{Ns}/events", HttpStatusCode.OK, NoEvents);
+        var clock = new SteppingClock();
+
+        var act = () =>
+            api.Client(clock)
+                .WaitForRolloutAsync(
+                    Ns,
+                    "Deployment",
+                    "hub",
+                    KubernetesDeployer.RolloutTimeout,
+                    CancellationToken.None
+                );
+
+        (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
+            "Deployment hub did not roll out: its pod cannot start (ImagePullBackOff)*"
+        );
+        clock
+            .Elapsed.Should()
+            .BeLessThan(TimeSpan.FromMinutes(1), "a pod that cannot start is not waited out");
+    }
+
+    private const string ForwardReplicaSets = """
+        {
+          "kind": "ReplicaSetList", "apiVersion": "apps/v1",
+          "items": [
+            { "metadata": { "name": "hub-old", "uid": "rs-old", "annotations": { "deployment.kubernetes.io/revision": "2" } } },
+            { "metadata": { "name": "hub-new", "uid": "rs-new", "annotations": { "deployment.kubernetes.io/revision": "3" } } }
+          ]
+        }
+        """;
+
+    private const string RollingDatabase = """
+        {
+          "kind": "StatefulSet", "apiVersion": "apps/v1",
+          "metadata": { "name": "database", "generation": 2 },
+          "spec": { "replicas": 1, "selector": {}, "template": {}, "serviceName": "database" },
+          "status": { "observedGeneration": 2, "replicas": 1, "readyReplicas": 0, "updatedReplicas": 0,
+            "currentRevision": "database-old", "updateRevision": "database-new" }
+        }
+        """;
+
+    private const string RolledDatabase = """
+        {
+          "kind": "StatefulSet", "apiVersion": "apps/v1",
+          "metadata": { "name": "database", "generation": 2 },
+          "spec": { "replicas": 1, "selector": {}, "template": {}, "serviceName": "database" },
+          "status": { "observedGeneration": 2, "replicas": 1, "readyReplicas": 1, "updatedReplicas": 1,
+            "currentRevision": "database-new", "updateRevision": "database-new" }
+        }
+        """;
+
+    /// <summary>A pod of the StatefulSet at <paramref name="revision"/>, waiting for <paramref name="reason"/>.</summary>
+    private static string DatabasePods(params (string Revision, string Reason)[] pods) =>
+        """{ "kind": "PodList", "apiVersion": "v1", "items": [ """
+        + string.Join(
+            ", ",
+            pods.Select(p =>
+                $$"""
+                    { "metadata": { "name": "database-0-{{p.Revision}}", "labels": { "controller-revision-hash": "{{p.Revision}}" } },
+                      "status": { "containerStatuses": [ { "name": "database", "ready": false, "restartCount": 0, "image": "x",
+                        "imageID": "", "state": { "waiting": { "reason": "{{p.Reason}}" } } } ] } }
+                    """
+            )
+        )
+        + "] }";
+
+    [Test]
+    public async Task A_StatefulSet_reports_the_broken_pod_of_its_update_revision_at_once()
+    {
+        var api = new StubKubernetesApi()
+            .On(
+                "GET",
+                $"/apis/apps/v1/namespaces/{Ns}/statefulsets/database/status",
+                HttpStatusCode.OK,
+                RollingDatabase
+            )
+            .On(
+                "GET",
+                $"/api/v1/namespaces/{Ns}/pods",
+                HttpStatusCode.OK,
+                DatabasePods(("database-new", "ImagePullBackOff"))
+            )
+            .On("GET", $"/api/v1/namespaces/{Ns}/events", HttpStatusCode.OK, NoEvents);
+        var clock = new SteppingClock();
+
+        var act = () =>
+            api.Client(clock)
+                .WaitForRolloutAsync(
+                    Ns,
+                    "StatefulSet",
+                    "database",
+                    KubernetesDeployer.RolloutTimeout,
+                    CancellationToken.None
+                );
+
+        (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
+            "StatefulSet database did not roll out: its pod cannot start (ImagePullBackOff)*"
+        );
+        clock
+            .Elapsed.Should()
+            .BeLessThan(TimeSpan.FromMinutes(1), "a pod that cannot start is not waited out");
+    }
+
+    [Test]
+    public async Task A_StatefulSet_is_not_failed_by_a_broken_pod_of_an_older_revision()
+    {
+        var reads = 0;
+        var api = new StubKubernetesApi()
+            .On(
+                "GET",
+                $"/apis/apps/v1/namespaces/{Ns}/statefulsets/database/status",
+                () =>
+                    StubKubernetesApi.Response(
+                        HttpStatusCode.OK,
+                        ++reads < 3 ? RollingDatabase : RolledDatabase
+                    )
+            )
+            .On(
+                "GET",
+                $"/api/v1/namespaces/{Ns}/pods",
+                HttpStatusCode.OK,
+                DatabasePods(
+                    ("database-old", "ImagePullBackOff"),
+                    ("database-new", "ContainerCreating")
+                )
+            )
+            .On("GET", $"/api/v1/namespaces/{Ns}/events", HttpStatusCode.OK, NoEvents);
+
+        await api.Client(new SteppingClock())
+            .WaitForRolloutAsync(
+                Ns,
+                "StatefulSet",
+                "database",
+                KubernetesDeployer.RolloutTimeout,
+                CancellationToken.None
+            );
+
+        reads.Should().Be(3);
+    }
+
     private const string TwoReplicaSets = """
         {
           "kind": "ReplicaSetList", "apiVersion": "apps/v1",
