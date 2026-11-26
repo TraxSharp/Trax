@@ -14,9 +14,11 @@ namespace Trax.Api.Auth.Tailscale;
 /// included.
 /// <para>
 /// It also refuses a default CORS policy that lets any origin in, by <c>AllowAnyOrigin()</c> or by an origin predicate
-/// that admits an origin nobody serves. Serve names the tailnet user on every request their device sends, whatever page
-/// sent it, so the login is an ambient credential that neither SameSite nor CORS's credential rules cover; a page on
-/// another site could otherwise call the hub as that user and read the answer.
+/// that admits an origin nobody serves, and an <see cref="TailscaleAuthenticationOptions.AllowedOrigins"/> value that
+/// is not an origin. Serve names the tailnet user on every request their device sends, whatever page sent it, so the
+/// login is an ambient credential that neither SameSite nor CORS's credential rules cover. The handler is what keeps a
+/// page on another site from calling the hub as that user (<see cref="TailscaleOrigin"/>); the CORS check is an early
+/// warning that the host meant to let other sites in.
 /// </para>
 /// </summary>
 internal sealed class TailscaleTrustValidator(
@@ -48,6 +50,18 @@ internal sealed class TailscaleTrustValidator(
                     + (secret is null ? "none is configured" : "the one configured is shorter")
                     + $". trax deploy sets it as {DeployExposure.ProxySecretVariable} on the hub and its proxy."
             );
+        var notOrigins = options
+            .Get(TailscaleDefaults.SchemeName)
+            .AllowedOrigins.Where(o => !TailscaleOrigin.TryNormalize(o, out _))
+            .ToList();
+        if (notOrigins.Count > 0)
+            throw new InvalidOperationException(
+                "AddTraxTailscaleAuth() AllowedOrigins holds a value that is not an origin ("
+                    + string.Join(", ", notOrigins.Select(o => $"'{o}'"))
+                    + "). Give a scheme and host, with a port if it is not the default, and no path or query: "
+                    + "https://app.example.com."
+            );
+        // An early warning only: the handler refuses a cross-site origin itself, whatever CORS allows.
         var policy = cors.Value.GetPolicy(cors.Value.DefaultPolicyName);
         if (policy is not null && (policy.AllowAnyOrigin || policy.IsOriginAllowed(ForeignOrigin)))
             throw new InvalidOperationException(

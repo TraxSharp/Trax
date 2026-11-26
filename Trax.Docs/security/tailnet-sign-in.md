@@ -65,6 +65,22 @@ The secret is compared as two SHA-256 digests with a fixed-time comparison, so t
 about how close a guess was. It changes on every deploy, so one that leaked from an old pod's environment stops
 working at the next release.
 
+## Another site's page is not the user
+
+Serve adds `Tailscale-User-Login` to every request the user's device sends to the hub, whatever page started it. A
+browser does not treat that header as a credential, so neither SameSite nor CORS's rule that `AllowAnyOrigin()`
+carries no credentials applies to it: without more, a page on any site a tailnet user opens could call the hub as
+them, and with a CORS policy that lets its origin in, read the answer.
+
+So the scheme decides by the page that sent the request, per request, and not by the host's CORS policy, which can be
+written in too many places (an inline `UseCors(...)`, a named policy, an endpoint's own) for a startup check to see
+all of them. A request whose `Origin` is the hub's own, or one the host lists in `AllowedOrigins`, is signed in. Any
+other `Origin`, the opaque `null` included, is anonymous. A request with no `Origin` is signed in, since that is what
+a non-browser caller, serve's own health checks, a same-origin `GET` and the user's own navigation send, unless
+`Sec-Fetch-Site` says another site's page embedded it (`cross-site` or `same-site`, on anything but a navigation).
+`Referer` is not read: a page can drop it, so its absence proves nothing. The startup check that refuses a default
+CORS policy letting any origin in stays, as an early warning that the host meant to let other sites in.
+
 ## Exposure is the deployment's to say
 
 Whether a host is reachable only through that proxy is a fact about the deployment, not about the code, and the host

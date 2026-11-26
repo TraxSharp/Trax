@@ -7,6 +7,7 @@ namespace Trax.Api.Auth.Tailscale
     public sealed class TailscaleAuthenticationOptions : Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions
     {
         public TailscaleAuthenticationOptions() { }
+        public System.Collections.Generic.IList<string> AllowedOrigins { get; }
         public string? ProxySecret { get; set; }
     }
     public sealed class TailscaleBuilder

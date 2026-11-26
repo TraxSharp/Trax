@@ -43,7 +43,10 @@ it came by. Decided with the user on 2026-11-16 and 2026-11-17 (MS-21); this rec
   kubernetes environment and on any service but the exposed hub. A deploy file may not set `Trax__Deploy__*` itself.
 - **The login is an ambient credential, so no origin is let in wholesale.** Serve names the user on every request
   their device sends, whatever page sent it; SameSite and CORS's credential rules do not cover it. The scheme refuses
-  to start when the host's default CORS policy allows any origin or its origin predicate admits one nobody serves.
+  to start when the host's default CORS policy allows any origin or its origin predicate admits one nobody serves,
+  and, because CORS can be configured where no startup check sees it, the handler itself leaves a request anonymous
+  when its `Origin` is neither the host's own nor in the scheme's `AllowedOrigins`, or when it has none and
+  `Sec-Fetch-Site` says another site's page embedded it.
 - **Roles come from logins.** Tailscale sends no identity for a tagged device, so tags cannot carry roles. A login
   the host does not name is refused unless it admits every login.
 - **Exposure is `tailnet` only.** `public` is refused until it is built.
@@ -88,10 +91,12 @@ in `Trax.Cli/tests/Trax.Cli.Tests/` holds the deploy to it: the policies' shape,
 Ingress, the edge, the secret given only to the hub and minted on every deploy, no published port under podman, and
 every refusal of the field and of the scheme, and under podman, a pod of their own for Tailscale and the edge with no
 TCP listener in it. `TailscaleTrustStartupTests` also holds the refusal of a default CORS policy that lets any
-origin in, and `DeployTailnetTests` the canary a cluster deploy proves the edge's policy with.
+origin in, `TailscaleAuthE2ETests` the anonymous answer to another site's page whatever CORS allows, and `DeployTailnetTests` the canary a cluster deploy proves the edge's policy with.
 
 ## Changelog
 
+- **2026-11-25**: The handler checks each request's `Origin` against the host's own and `AllowedOrigins`, so a CORS
+  policy the startup check cannot see no longer lets another site's page call the hub as the user.
 - **2026-11-25**: The canary probe must also reach a control listener the policies admit it to, so a probe that
   cannot connect at all no longer passes.
 - **2026-11-25**: The proxy secret is rotated after the drain, not before it, and under podman only by the restart

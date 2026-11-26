@@ -18,6 +18,7 @@ source:
   - Trax.Api/src/Trax.Api.Auth.Tailscale/TailscaleProxySecret.cs
   - Trax.Api/src/Trax.Api.Auth.Tailscale/TailscaleHeaderValue.cs
   - Trax.Api/src/Trax.Api.Auth.Tailscale/TailscaleLogins.cs
+  - Trax.Api/src/Trax.Api.Auth.Tailscale/TailscaleOrigin.cs
 ---
 
 # AddTraxTailscaleAuth
@@ -49,6 +50,7 @@ public sealed class TailscaleBuilder
 public sealed class TailscaleAuthenticationOptions : AuthenticationSchemeOptions
 {
     public string? ProxySecret { get; set; }
+    public IList<string> AllowedOrigins { get; }
 }
 ```
 
@@ -57,7 +59,7 @@ public sealed class TailscaleAuthenticationOptions : AuthenticationSchemeOptions
 | Parameter | Type | Description |
 |---|---|---|
 | `configure` | `Action<TailscaleBuilder>` | Names the logins admitted and their roles. At least one `Login` or an `AnyLogin` is required; a builder that admits nobody throws `InvalidOperationException` at registration. |
-| `configureOptions` | `Action<TailscaleAuthenticationOptions>?` | Sets `ProxySecret` from somewhere other than configuration. |
+| `configureOptions` | `Action<TailscaleAuthenticationOptions>?` | Sets `ProxySecret` from somewhere other than configuration, and `AllowedOrigins`. |
 
 ## Members
 
@@ -73,6 +75,7 @@ public sealed class TailscaleAuthenticationOptions : AuthenticationSchemeOptions
 | Member | Description |
 |---|---|
 | `ProxySecret` | The secret the proxy sends in `Trax-Proxy-Secret`. When it is not set in code it is read from configuration under `Trax:Deploy:ProxySecret` ([`DeployExposure.ProxySecretKey`](/docs/sdk-reference/configuration/deploy-exposure)), where `trax deploy` puts it. |
+| `AllowedOrigins` | Origins, besides the host's own, whose pages may call the host as the tailnet user (`https://app.example.ts.net`: a scheme and host, with a port when it is not the default, nothing else). Matching ignores case and a spelled-out default port. Empty by default. A value that is not an origin stops the host at startup. See [The login is an ambient credential](#the-login-is-an-ambient-credential). |
 
 `TailscaleDefaults`:
 
@@ -105,7 +108,8 @@ A host that registers the scheme refuses to start, in every environment includin
 - the proxy secret is configured and at least 32 characters. `trax deploy` mints a new one on every deploy; and
 - the host's default CORS policy, if it has one, does not let any origin in: neither `AllowAnyOrigin()` nor an
   origin predicate (`SetIsOriginAllowed`) that admits an origin no host serves. Name the origins with
-  `WithOrigins(...)`. See [The login is an ambient credential](#the-login-is-an-ambient-credential).
+  `WithOrigins(...)`. See [The login is an ambient credential](#the-login-is-an-ambient-credential); and
+- every `AllowedOrigins` value is an origin.
 
 ```
 AddTraxTailscaleAuth() trusts Tailscale identity headers, and this host's exposure is not set. It starts only where
@@ -127,6 +131,7 @@ The scheme never reads the address a request came from, so neither a forwarded-f
 |---|---|
 | No `Trax-Proxy-Secret` header | `NoResult()`: anonymous, whatever identity headers it carries. |
 | `Trax-Proxy-Secret` more than once, or with a value that is not the secret | `NoResult()`, and a Warning that names the header and not the value. |
+| The secret, and an `Origin` that is neither the host's own nor in `AllowedOrigins` (`null` and unreadable values included), or no `Origin` and `Sec-Fetch-Site` `cross-site` or `same-site` on a request that is not a navigation | `NoResult()`, and an Information log naming the origin, whatever the host's CORS policy allows. |
 | The secret, and `Tailscale-Funnel-Request` | `NoResult()`: Funnel traffic comes from outside the tailnet and has no identity. |
 | The secret, and no `Tailscale-User-Login` | `NoResult()`. Tailscale sends no identity for a request from a tagged device, or from the proxy's own host. |
 | The secret, and `Tailscale-User-Login` more than once | `Fail("Multiple tailnet logins presented.")` |
@@ -149,9 +154,22 @@ absolute `https` or `http` address, the `picture` claim. Its qualified id is `Tr
 Serve adds `Tailscale-User-Login` to every request the user's device sends to the hub, whatever page started it. A
 browser does not treat that as a credential: SameSite does not apply to it, and CORS's rule that `AllowAnyOrigin()`
 never carries credentials does not apply either, because the request needs none. So a page on any site a tailnet user
-opens could send the hub a mutation as that user, and with a default CORS policy that lets its origin in, read the
-answer. The startup check refuses a default policy that lets any origin in. It reads only the default policy: an
-endpoint given a named policy of its own (`RequireCors("name")`) is the host's to keep as narrow.
+opens could send the hub a mutation as that user, and with a CORS policy that lets its origin in, read the answer.
+
+The handler decides per request, by the page that sent it, and the host's CORS policy plays no part, so an inline
+`app.UseCors(p => p.AllowAnyOrigin())`, a named policy or an endpoint's own cannot widen it:
+
+- `Origin` present: signed in only when it is the host the request was addressed to (in either scheme, since TLS
+  ends at the proxy) or in `AllowedOrigins`. Any other value, the opaque `null` included, is anonymous. The answer
+  is anonymous rather than `403` so the endpoint behaves for that page as it does for anyone not signed in.
+- No `Origin`: signed in, since that is what a non-browser caller, serve's health checks, a same-origin `GET` and the
+  user's own navigation send; except when `Sec-Fetch-Site` is `cross-site` or `same-site` and `Sec-Fetch-Mode` is not
+  `navigate`, which is a subresource another page embedded.
+- `Referer` is not read. A page can drop it, so its absence proves nothing, and `Origin` carries what it would.
+
+The startup check that refuses a default CORS policy letting any origin in stays, as an early warning that the host
+meant to let other sites in. Name the origins of your own pages with `AllowedOrigins` and, for those pages to read
+the answers, in CORS with `WithOrigins(...)`.
 
 ### Roles come from logins, not tags
 
@@ -177,7 +195,7 @@ authenticated like any other.
 | The admitted logins and their roles | Singleton |
 | `TailscalePolicy`, and `TraxTailscale` in `TraxAuthPolicy` | |
 | [`TraxPrincipal` and `TraxCaller`](/docs/sdk-reference/api-auth/add-trax-principal-accessor), through `AddTraxPrincipalAccessor()` | Scoped |
-| The startup check on the exposure, the secret and the default CORS policy, registered once | Hosted service |
+| The startup check on the exposure, the secret, `AllowedOrigins` and the default CORS policy, registered once | Hosted service |
 
 ## Examples
 
@@ -185,6 +203,14 @@ authenticated like any other.
 services.AddTraxTailscaleAuth(tailnet => tailnet
     .Login("alice@example.com", "Admin", "Operator")
     .Login("bob@example.com", "Operator"));
+```
+
+A console on another machine of the tailnet calls the hub as the signed-in user:
+
+```csharp fragment
+services.AddTraxTailscaleAuth(
+    tailnet => tailnet.AnyLogin("Reader"),
+    options => options.AllowedOrigins.Add("https://console.example.ts.net"));
 ```
 
 Every login on the tailnet as a reader, a few as more:

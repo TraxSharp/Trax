@@ -19,6 +19,7 @@ namespace Trax.Api.Auth.Tailscale;
 /// Return semantics:
 /// <list type="bullet">
 /// <item>No proxy secret, more than one, or a value that does not match: <see cref="AuthenticateResult.NoResult"/>, whatever identity headers the request carries. A wrong value is logged at Warning, without the value.</item>
+/// <item>The secret, and a request a page on another site sent (<see cref="TailscaleOrigin"/>): <see cref="AuthenticateResult.NoResult"/>, whatever the host's CORS policy allows.</item>
 /// <item>The secret, and a Funnel request or no login (a tagged device, or the proxy's own host): <see cref="AuthenticateResult.NoResult"/>.</item>
 /// <item>The secret, and the login header more than once, or one value holding a comma, or one that does not decode: <see cref="AuthenticateResult.Fail(string)"/>.</item>
 /// <item>The secret, and a login the builder does not admit: <see cref="AuthenticateResult.Fail(string)"/>.</item>
@@ -39,7 +40,7 @@ internal sealed class TailscaleAuthHandler(
 
     private AuthenticateResult Read()
     {
-        if (!FromProxy())
+        if (!FromProxy() || !FromAllowedPage())
             return AuthenticateResult.NoResult();
 
         var headers = Request.Headers;
@@ -111,6 +112,18 @@ internal sealed class TailscaleAuthHandler(
         Logger.LogWarning(
             "A request carried {Header} with a value that is not the proxy's; its tailnet identity headers were ignored.",
             DeployExposure.ProxySecretHeader
+        );
+        return false;
+    }
+
+    /// <summary>Whether the page that sent the request, if any, may call the host as the user (<see cref="TailscaleOrigin"/>).</summary>
+    private bool FromAllowedPage()
+    {
+        if (TailscaleOrigin.Allowed(Request, Options.AllowedOrigins))
+            return true;
+        Logger.LogInformation(
+            "A request from origin {Origin} is not signed in by tailnet identity: another site's page sent it.",
+            Request.Headers.Origin.ToString()
         );
         return false;
     }

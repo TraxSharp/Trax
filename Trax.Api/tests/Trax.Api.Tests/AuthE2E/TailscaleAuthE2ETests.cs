@@ -269,6 +269,130 @@ public class TailscaleAuthE2ETests
         Caller(doc).Authenticated.Should().BeFalse();
     }
 
+    private static readonly (string, string)[] FromProxy =
+    [
+        (DeployExposure.ProxySecretHeader, TailnetProxySecret),
+        (TailscaleDefaults.LoginHeader, TailnetAdmin),
+    ];
+
+    private static Task<IHost> StartWithAsync(
+        Action<TailscaleAuthenticationOptions>? options = null,
+        Action<IApplicationBuilder>? app = null
+    ) =>
+        StartAsync(
+            (
+                services =>
+                {
+                    services.AddCors();
+                    if (options is not null)
+                        services.Configure(TailscaleDefaults.SchemeName, options);
+                },
+                a => app?.Invoke(a)
+            )
+        );
+
+    [Test]
+    public async Task A_request_from_another_sites_page_is_anonymous()
+    {
+        using var host = await StartWithAsync();
+
+        using var doc = await host.PostGraphQLAsync(
+            WhoAmIQuery,
+            Headers([.. FromProxy, ("Origin", "https://evil.example")])
+        );
+
+        Caller(doc).Authenticated.Should().BeFalse();
+    }
+
+    [TestCase("null")]
+    [TestCase("not an origin")]
+    public async Task An_opaque_or_unreadable_origin_is_anonymous(string origin)
+    {
+        using var host = await StartWithAsync();
+
+        using var doc = await host.PostGraphQLAsync(
+            WhoAmIQuery,
+            Headers([.. FromProxy, ("Origin", origin)])
+        );
+
+        Caller(doc).Authenticated.Should().BeFalse();
+    }
+
+    [Test]
+    public async Task A_cors_policy_that_lets_any_origin_in_does_not_sign_another_sites_page_in()
+    {
+        using var host = await StartWithAsync(app: a =>
+            a.UseCors(p => p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod())
+        );
+
+        using var doc = await host.PostGraphQLAsync(
+            WhoAmIQuery,
+            Headers([.. FromProxy, ("Origin", "https://evil.example")])
+        );
+
+        Caller(doc).Authenticated.Should().BeFalse();
+    }
+
+    [Test]
+    public async Task A_page_on_an_allowed_origin_is_signed_in()
+    {
+        using var host = await StartWithAsync(o =>
+            o.AllowedOrigins.Add("https://Console.Example.ts.net:443")
+        );
+
+        using var doc = await host.PostGraphQLAsync(
+            WhoAmIQuery,
+            Headers([.. FromProxy, ("Origin", "https://console.example.ts.net")])
+        );
+
+        Caller(doc).Authenticated.Should().BeTrue();
+    }
+
+    [TestCase("https://localhost")]
+    [TestCase("http://localhost")]
+    public async Task A_page_on_the_hosts_own_origin_is_signed_in(string origin)
+    {
+        using var host = await StartWithAsync();
+
+        using var doc = await host.PostGraphQLAsync(
+            WhoAmIQuery,
+            Headers([.. FromProxy, ("Origin", origin)])
+        );
+
+        Caller(doc).Authenticated.Should().BeTrue();
+    }
+
+    [Test]
+    public async Task A_request_with_no_origin_is_signed_in()
+    {
+        using var host = await StartWithAsync();
+
+        using var doc = await host.PostGraphQLAsync(WhoAmIQuery, Headers(FromProxy));
+
+        Caller(doc).Authenticated.Should().BeTrue();
+    }
+
+    [TestCase("cross-site", "no-cors", false)]
+    [TestCase("same-site", "cors", false)]
+    [TestCase("cross-site", "navigate", true)]
+    [TestCase("same-origin", "cors", true)]
+    [TestCase("none", "navigate", true)]
+    public async Task Without_an_origin_another_pages_subresource_is_anonymous(
+        string site,
+        string mode,
+        bool signedIn
+    )
+    {
+        using var host = await StartWithAsync();
+
+        using var doc = await host.PostGraphQLAsync(
+            WhoAmIQuery,
+            Headers([.. FromProxy, ("Sec-Fetch-Site", site), ("Sec-Fetch-Mode", mode)])
+        );
+
+        Caller(doc).Authenticated.Should().Be(signedIn);
+    }
+
     private static async Task<HttpStatusCode> ProtectedStatusAsync(
         IHost host,
         params (string Name, string Value)[] headers

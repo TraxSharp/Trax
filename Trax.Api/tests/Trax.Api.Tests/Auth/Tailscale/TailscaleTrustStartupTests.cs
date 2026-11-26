@@ -124,6 +124,21 @@ public class TailscaleTrustStartupTests
     }
 
     [Test]
+    public async Task An_allowed_origin_that_is_not_an_origin_refuses_to_start()
+    {
+        var act = () =>
+            StartAsync(
+                DeployExposure.Tailnet,
+                Secret,
+                allowedOrigins: ["https://app.example.com", "https://app.example.com/path"]
+            );
+
+        await act.Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*AllowedOrigins*'https://app.example.com/path'*");
+    }
+
+    [Test]
     public void A_scheme_that_admits_nobody_is_refused_at_registration()
     {
         var act = () => new ServiceCollection().AddTraxTailscaleAuth(_ => { });
@@ -136,7 +151,8 @@ public class TailscaleTrustStartupTests
         string? secret,
         string environment = "Production",
         string? configureSecret = null,
-        Action<CorsOptions>? cors = null
+        Action<CorsOptions>? cors = null,
+        string[]? allowedOrigins = null
     )
     {
         var settings = new Dictionary<string, string?>(StringComparer.Ordinal);
@@ -154,7 +170,13 @@ public class TailscaleTrustStartupTests
                     services.AddCors(cors);
                 services.AddTraxTailscaleAuth(
                     tailnet => tailnet.Login("admin@example.com", "Admin"),
-                    configureSecret is null ? null : o => o.ProxySecret = configureSecret
+                    o =>
+                    {
+                        if (configureSecret is not null)
+                            o.ProxySecret = configureSecret;
+                        foreach (var origin in allowedOrigins ?? [])
+                            o.AllowedOrigins.Add(origin);
+                    }
                 );
             })
             .Build();
