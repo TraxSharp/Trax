@@ -1,6 +1,5 @@
 using System.CommandLine;
 using System.Diagnostics;
-using System.Globalization;
 using Trax.Cli.Deploy;
 using Trax.Core.Extensions;
 using Trax.Effect.Configuration.Deploy;
@@ -471,33 +470,25 @@ internal static class DeployCommand
         return await reader.ReadLineAsync().ConfigureAwait(false);
     }
 
-    private static async Task BuildImageAsync(string projectPath, string repository)
+    private static Task BuildImageAsync(string projectPath, string repository) =>
+        LockedPublish.RunAsync(
+            LockedPublish.Restore(projectPath),
+            ComposeImage(projectPath, repository),
+            $"the {repository} image"
+        );
+
+    internal static ProcessStartInfo ComposeImage(string projectPath, string repository)
     {
-        var psi = new ProcessStartInfo("dotnet")
-        {
-            WorkingDirectory = Path.GetDirectoryName(projectPath).NotNull(),
-            UseShellExecute = false,
-        };
+        var psi = LockedPublish.Publish(projectPath);
         foreach (
             var arg in new[]
             {
-                "publish",
-                projectPath,
-                "-c",
-                "Release",
                 "-t:PublishContainer",
                 $"-p:ContainerRepository={repository}",
                 "-p:ContainerImageTags=latest",
             }
         )
             psi.ArgumentList.Add(arg);
-        var (exit, stdout, stderr) = await ChildProcess.RunAsync(psi).ConfigureAwait(false);
-        if (exit != 0)
-            throw new InvalidOperationException(
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"Building the {repository} image failed (exit {exit}):\n{stdout}{stderr}"
-                )
-            );
+        return psi;
     }
 }

@@ -122,6 +122,8 @@ rm -f "$RUNNER_TEMP_DIR/secret.env"
 
 say "first deploy"
 "${TRAX[@]}" deploy --env cluster --file "$DIR/trax.deploy.ci.json"
+# The images come from a locked restore; a deploy that rewrote a lockfile would fail the podman and compose proofs.
+git diff --quiet -- '*packages.lock.json' || { git diff --stat -- '*packages.lock.json'; fail "the deploy rewrote a lockfile"; }
 
 image_of() { kubectl -n "$NS" get deployment "$1" -o jsonpath='{.spec.template.spec.containers[0].image}'; }
 probe() {

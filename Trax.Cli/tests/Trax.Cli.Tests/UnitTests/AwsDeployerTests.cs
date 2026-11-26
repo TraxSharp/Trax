@@ -829,8 +829,7 @@ public class AwsDeployerTests
                 "-p:ContainerRegistry=123.dkr.ecr.us-west-2.amazonaws.com",
                 "-p:ContainerRepository=trax/orders-production/hub",
                 $"-p:ContainerImageTags={Tag}",
-                "linux",
-                "x64",
+                "-p:ContainerRuntimeIdentifier=linux-x64",
             ]);
         psi.Environment["DOTNET_CONTAINER_REGISTRY_UNAME"].Should().Be("AWS");
         psi.Environment["DOTNET_CONTAINER_REGISTRY_PWORD"].Should().Be("token");

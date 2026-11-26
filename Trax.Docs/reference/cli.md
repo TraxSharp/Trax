@@ -692,6 +692,13 @@ environment's target decides, and a `--target` given beside it must match it or 
 Without `--env`, `--target compose` (the default) writes the podman stack below; `--target aws` and
 `--target kubernetes` need an environment.
 
+Every image is built from its project's committed lockfiles: trax runs `dotnet restore --locked-mode` on the
+project, then `dotnet publish --no-restore`, so a deploy never rewrites a `packages.lock.json` and stops on one that
+has drifted. The app is published for no particular runtime, and the aws and kubernetes targets make its image for
+linux-x64 (`-p:ContainerRuntimeIdentifier=linux-x64`), which runs it as `dotnet <app>.dll`. A project needs no
+`RuntimeIdentifiers` for this, and should not list them: with them, restore downloads runtime packs that no
+lockfile pins.
+
 ### `trax.deploy.json`
 
 ```json

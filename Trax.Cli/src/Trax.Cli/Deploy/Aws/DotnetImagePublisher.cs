@@ -1,35 +1,27 @@
 using System.Diagnostics;
-using System.Globalization;
 using System.Text.Json.Nodes;
-using Trax.Core.Extensions;
 using Trax.Effect.Configuration.Deploy;
 
 namespace Trax.Cli.Deploy.Aws;
 
 /// <summary>
-/// Builds a service's image with <c>dotnet publish -t:PublishContainer</c> for linux-x64 and pushes it straight to
-/// the registry, with the registry login passed in the environment: no docker or podman needed.
+/// Builds a service's image with <c>dotnet publish -t:PublishContainer</c> for linux-x64, from a locked restore
+/// (<see cref="LockedPublish"/>), and pushes it straight to the registry, with the registry login passed in the
+/// environment: no docker or podman needed.
 /// </summary>
 internal sealed class DotnetImagePublisher : IImagePublisher
 {
-    public async Task PublishAsync(
+    public Task PublishAsync(
         string projectPath,
         string repositoryUri,
         string tag,
         RegistryLogin login
-    )
-    {
-        var (exit, stdout, stderr) = await ChildProcess
-            .RunAsync(StartInfo(projectPath, repositoryUri, tag, login))
-            .ConfigureAwait(false);
-        if (exit != 0)
-            throw new InvalidOperationException(
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"Publishing {Path.GetFileName(projectPath)} to {repositoryUri} failed (exit {exit}):\n{stdout}{stderr}"
-                )
-            );
-    }
+    ) =>
+        LockedPublish.RunAsync(
+            LockedPublish.Restore(projectPath),
+            StartInfo(projectPath, repositoryUri, tag, login),
+            repositoryUri
+        );
 
     internal static ProcessStartInfo StartInfo(
         string projectPath,
@@ -39,23 +31,12 @@ internal sealed class DotnetImagePublisher : IImagePublisher
     )
     {
         var slash = repositoryUri.IndexOf('/', StringComparison.Ordinal);
-        var psi = new ProcessStartInfo("dotnet")
-        {
-            WorkingDirectory = Path.GetDirectoryName(projectPath).NotNull(),
-            UseShellExecute = false,
-        };
+        var psi = LockedPublish.Publish(projectPath);
         foreach (
             var arg in new[]
             {
-                "publish",
-                projectPath,
-                "-c",
-                "Release",
-                "--os",
-                "linux",
-                "--arch",
-                "x64",
                 "-t:PublishContainer",
+                $"-p:ContainerRuntimeIdentifier={LockedPublish.Runtime}",
                 $"-p:ContainerRegistry={repositoryUri[..slash]}",
                 $"-p:ContainerRepository={repositoryUri[(slash + 1)..]}",
                 $"-p:ContainerImageTags={tag}",
