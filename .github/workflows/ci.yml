@@ -1392,7 +1392,7 @@ jobs:
         # from a container with no egress, then must find it blocked from behind the egress. Resolving it here lets
         # harden-runner learn its addresses before the containers dial them.
         run: |
-          getent hosts one.one.one.one
+          getent ahostsv4 one.one.one.one
           test/e2e.sh localhost/trax-egress:ci api.github.com
       - name: Install qemu for the arm64 build
         run: |

@@ -91,12 +91,20 @@ say "control: the outside destinations the probes use answer without the egress"
 # by the egress and nothing else. Behind a firewall that already drops 1.1.1.1 (CI's harden-runner, unless the job
 # allows one.one.one.one) they would read blocked whatever the egress did, so from a container with no egress both
 # must answer first.
-# shellcheck disable=SC2086 # pod_dns is a list of options
-if podman run --rm --network "$name" $pod_dns --user "$app_uid:$app_uid" --cap-drop ALL --entrypoint sh "$image" \
-  -c 'nc -z -w 5 1.1.1.1 443 && nslookup -type=a example.com 1.1.1.1 >/dev/null'; then
-  echo "-> 1.1.1.1:443 and DNS on 1.1.1.1:53 answer without the egress"
+control() {
+  # shellcheck disable=SC2086 # pod_dns is a list of options
+  podman run --rm --network "$name" $pod_dns --user "$app_uid:$app_uid" --cap-drop ALL --entrypoint sh "$image" -c "$1"
+}
+if control 'nc -z -w 5 1.1.1.1 443'; then
+  echo "-> 1.1.1.1:443 answers without the egress"
 else
-  echo "!! 1.1.1.1 does not answer without the egress, so the probes that it is blocked would prove nothing"
+  echo "!! 1.1.1.1:443 does not answer without the egress, so the probe that it is blocked would prove nothing"
+  exit 1
+fi
+if control 'nslookup -type=a example.com 1.1.1.1 >/dev/null'; then
+  echo "-> DNS on 1.1.1.1:53 answers without the egress"
+else
+  echo "!! DNS on 1.1.1.1:53 does not answer without the egress, so the probe that it is blocked would prove nothing"
   exit 1
 fi
 
