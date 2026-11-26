@@ -70,10 +70,11 @@ A process started with `--trax-drain`:
 1. sets the drain to lapse at now plus the timeout plus `Margin`, replacing any drain in force;
 2. waits 5 seconds, so a host that read the row just before it was set finishes its cycle and its work shows;
 3. reads the busy list every 2 seconds. When it is empty, the process exits and leaves the drain in place for the
-   roll. Before each read it checks the drain in force is still its own; ended (Resume in the console, another
-   deploy's `--trax-resume`) or replaced by another drain, it throws without touching the row, so the deploy
-   refuses rather than roll over work the hosts may have started meanwhile.
-4. Past the timeout, it ends the drain and throws, naming what is busy (the first 50, and how many more), so the
+   roll. Before each read, and again once a read comes back empty or past the timeout, it checks the drain in force
+   is still its own; ended (Resume in the console, another deploy's `--trax-resume`) or replaced by another drain,
+   it throws without touching the row, so the deploy refuses rather than roll over work the hosts may have started
+   meanwhile.
+4. Past the timeout, it ends its own drain and throws, naming what is busy (the first 50, and how many more), so the
    process exits non-zero and the deploy refuses. With `TRAX_DRAIN_FORCE=true` it logs the list instead and exits as
    though drained, with the drain kept.
 

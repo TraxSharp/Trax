@@ -101,6 +101,39 @@ internal static class DrainStore
     }
 
     /// <summary>
+    /// Ends the drain only when it is still <paramref name="owned"/>: started at the same time by the same actor. A drain
+    /// set since by someone else is left as it is. Returns whether it ended one.
+    /// </summary>
+    public static async Task<bool> ClearOwnedAsync(
+        IDataContext context,
+        DrainRow owned,
+        CancellationToken ct
+    )
+    {
+        var row = await context
+            .Drains.FirstOrDefaultAsync(d => d.Id == DrainRow.SingletonId, ct)
+            .ConfigureAwait(false);
+        if (row is null || !SameDrain(row, owned))
+            return false;
+        context.Drains.Remove(row);
+        try
+        {
+            await context.SaveChanges(ct).ConfigureAwait(false);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            context.Reset();
+            return false;
+        }
+        return true;
+    }
+
+    /// <summary>Whether <paramref name="row"/> is the drain <paramref name="other"/> was read as: same start, same actor.</summary>
+    public static bool SameDrain(DrainRow row, DrainRow other) =>
+        row.StartedAt == other.StartedAt
+        && string.Equals(row.StartedBy, other.StartedBy, StringComparison.Ordinal);
+
+    /// <summary>
     /// The work a drain waits on, at most <see cref="BusyListCap"/> items, runs first, with the total of each kind.
     /// </summary>
     /// <remarks>

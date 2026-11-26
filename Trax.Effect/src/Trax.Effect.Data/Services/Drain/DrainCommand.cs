@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Extensions;
 using Trax.Effect.Configuration.Deploy;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using DrainRow = Trax.Effect.Models.Drain.Drain;
@@ -63,22 +64,24 @@ internal static class DrainCommand
                     ct
                 )
                 .ConfigureAwait(false);
-            if (total == 0)
-            {
-                logger?.LogInformation("Nothing is busy; the hosts can be replaced.");
-                return;
-            }
-
             var now = clock.GetUtcNow();
-            if (now >= deadline)
+            if (total == 0 || now >= deadline)
             {
+                // A resume or another drain that landed between the look above and the busy read went unseen, and
+                // both answers act on the drain, so look again before either.
+                await StillMineAsync(factory, clock, mine, ct).ConfigureAwait(false);
+                if (total == 0)
+                {
+                    logger?.LogInformation("Nothing is busy; the hosts can be replaced.");
+                    return;
+                }
                 await PastTimeoutAsync(
                         factory,
-                        clock,
                         logger,
                         timeout,
                         until,
                         force,
+                        mine.NotNull(),
                         BusyList(items, total)
                     )
                     .ConfigureAwait(false);
@@ -138,12 +141,7 @@ internal static class DrainCommand
                 ct
             )
             .ConfigureAwait(false);
-        if (
-            mine is not null
-            && now is not null
-            && now.StartedAt == mine.StartedAt
-            && string.Equals(now.StartedBy, mine.StartedBy, StringComparison.Ordinal)
-        )
+        if (mine is not null && now is not null && DrainStore.SameDrain(now, mine))
             return;
         throw new InvalidOperationException(
             "The drain was ended or replaced while it waited, so the hosts may be taking work again and nothing "
@@ -153,15 +151,16 @@ internal static class DrainCommand
 
     /// <summary>
     /// What a drain does once its timeout passes with work still busy: with <paramref name="force"/>, logs the list and
-    /// returns with the drain kept; otherwise ends the drain and throws, naming the list.
+    /// returns with the drain kept; otherwise ends the drain, if it is still <paramref name="mine"/>, and throws, naming
+    /// the list.
     /// </summary>
     private static async Task PastTimeoutAsync(
         IDataContextProviderFactory factory,
-        TimeProvider clock,
         ILogger? logger,
         TimeSpan timeout,
         DateTimeOffset until,
         bool force,
+        DrainRow mine,
         string list
     )
     {
@@ -178,10 +177,11 @@ internal static class DrainCommand
             return;
         }
 
-        // Ended whatever cancelled the wait, so a refused deploy leaves the hosts taking work.
+        // Ended whatever cancelled the wait, so a refused deploy leaves the hosts taking work. A drain someone else set
+        // since is theirs to end.
         await WithContextAsync(
                 factory,
-                c => DrainStore.ClearAsync(c, clock.GetUtcNow(), CancellationToken.None),
+                c => DrainStore.ClearOwnedAsync(c, mine, CancellationToken.None),
                 CancellationToken.None
             )
             .ConfigureAwait(false);

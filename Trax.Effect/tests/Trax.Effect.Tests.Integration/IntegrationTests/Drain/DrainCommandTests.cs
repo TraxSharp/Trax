@@ -8,10 +8,12 @@ using Trax.Effect.Configuration.Deploy;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.Drain;
+using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
+using Trax.Effect.Services.EffectProvider;
 using Trax.Effect.Tests.Integration.Fixtures;
 
 namespace Trax.Effect.Tests.Integration.IntegrationTests.Drain;
@@ -246,6 +248,69 @@ public class DrainCommandTests : TestSetup
     }
 
     [Test]
+    public async Task A_drain_replaced_just_before_the_busy_read_that_finds_nothing_refuses()
+    {
+        // The replacement and the run's end land between the drain's ownership look and its busy read, so the busy
+        // read finds nothing; the drain must still see it is no longer its own.
+        var run = await Run(TrainState.InProgress);
+        var services = new HookedServices(
+            Scope.ServiceProvider,
+            BeforeBusyRead,
+            async () =>
+            {
+                await ReplaceWithOperatorDrain().ConfigureAwait(false);
+                await SetState(run.Id, TrainState.Completed).ConfigureAwait(false);
+            }
+        );
+
+        await FluentActions
+            .Awaiting(() =>
+                DrainCommand.DrainAsync(
+                    services,
+                    TimeSpan.FromSeconds(30),
+                    force: false,
+                    settle: TimeSpan.Zero,
+                    poll: Fast,
+                    CancellationToken.None
+                )
+            )
+            .Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*drain was ended or replaced while it waited*");
+        (await Row()).NotNull().StartedBy.Should().Be("operator:bob");
+    }
+
+    [Test]
+    public async Task A_drain_replaced_just_before_the_timeout_is_not_ended_by_the_refusal()
+    {
+        await Run(TrainState.InProgress);
+        var services = new HookedServices(
+            Scope.ServiceProvider,
+            BeforeBusyRead,
+            ReplaceWithOperatorDrain
+        );
+
+        await FluentActions
+            .Awaiting(() =>
+                DrainCommand.DrainAsync(
+                    services,
+                    TimeSpan.FromTicks(1),
+                    force: false,
+                    settle: TimeSpan.Zero,
+                    poll: Fast,
+                    CancellationToken.None
+                )
+            )
+            .Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*drain was ended or replaced while it waited*");
+        (await Row())
+            .NotNull()
+            .StartedBy.Should()
+            .Be("operator:bob", "a refused deploy ends only its own drain");
+    }
+
+    [Test]
     public async Task Resume_ends_the_drain()
     {
         await DrainCommand.DrainAsync(
@@ -329,6 +394,28 @@ public class DrainCommandTests : TestSetup
         (await Row()).Should().BeNull();
     }
 
+    /// <summary>
+    /// Which context the drain opens first for its busy read: after setting the row, reading it back and checking it is
+    /// still its own.
+    /// </summary>
+    private const int BeforeBusyRead = 4;
+
+    private async Task ReplaceWithOperatorDrain()
+    {
+        var context = (IDataContext)DataContextFactory.Create();
+        await using var disposal = context.ConfigureAwait(false);
+        var now = TimeProvider.System.GetUtcNow();
+        await DrainStore
+            .SetAsync(
+                context,
+                now + TimeSpan.FromMinutes(5),
+                now + TimeSpan.FromSeconds(1),
+                "operator:bob",
+                CancellationToken.None
+            )
+            .ConfigureAwait(false);
+    }
+
     private async Task UntilRow()
     {
         var deadline = TimeProvider.System.GetUtcNow() + TimeSpan.FromSeconds(30);
@@ -388,6 +475,40 @@ public class DrainCommandTests : TestSetup
         await context.Track(metadata).ConfigureAwait(false);
         await context.SaveChanges(CancellationToken.None).ConfigureAwait(false);
         return metadata;
+    }
+
+    /// <summary>
+    /// The test's services, with a data context factory that runs <paramref name="hook"/> once, before it opens its
+    /// <paramref name="call"/>th context, to land a change at an exact point in the drain's sequence of reads.
+    /// </summary>
+    private sealed class HookedServices(IServiceProvider inner, int call, Func<Task> hook)
+        : IServiceProvider
+    {
+        private readonly HookedFactory _factory = new(
+            inner.GetRequiredService<IDataContextProviderFactory>(),
+            call,
+            hook
+        );
+
+        public object? GetService(Type serviceType) =>
+            serviceType == typeof(IDataContextProviderFactory)
+                ? _factory
+                : inner.GetService(serviceType);
+    }
+
+    private sealed class HookedFactory(IDataContextProviderFactory inner, int call, Func<Task> hook)
+        : IDataContextProviderFactory
+    {
+        private int _calls;
+
+        public IEffectProvider Create() => inner.Create();
+
+        public async Task<IDataContext> CreateDbContextAsync(CancellationToken cancellationToken)
+        {
+            if (Interlocked.Increment(ref _calls) == call)
+                await hook().ConfigureAwait(false);
+            return await inner.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        }
     }
 
     /// <summary>A host that records whether anything started it.</summary>
