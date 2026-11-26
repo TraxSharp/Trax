@@ -488,6 +488,19 @@ public class DeployTailnetTests
             .WithMessage("*takes the name of the proxy*");
     }
 
+    [Test]
+    public void A_service_named_like_the_canary_is_refused()
+    {
+        var file = Tailnet();
+        file.Services[KubernetesTailnet.CanaryName] = file.Services["reports"];
+
+        var act = () => file.Environment("staging");
+
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage($"*'{KubernetesTailnet.CanaryName}'*proves the edge's network policy*");
+    }
+
     [TestCase("Trax__Deploy__Exposure", true)]
     [TestCase("Trax__Deploy__ProxySecret", true)]
     [TestCase("trax__deploy__exposure", false)]

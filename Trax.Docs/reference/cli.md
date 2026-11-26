@@ -1232,7 +1232,8 @@ proxy to it, and runs the Job `<app>-tailnet-probe-<tag>` from one of the app's 
 it three times in a row within a minute. If the probe gets through, the deploy stops, nothing is exposed, and the
 error ends with the probe's log: the edge vouches for whoever reaches it, so a plugin that ignores NetworkPolicy
 would let any pod in the cluster sign in as anyone. The canary and its Service are deleted either way; the Job is
-kept a day.
+kept a day. A service named `tailnet` or `tailnet-canary` is refused in a tailnet environment, since the deploy
+applies its own objects under those names.
 
 trax writes that Secret itself, with a new random value on every deploy (32 bytes, base64url), after the drain and
 before the services, so a deploy refused before the roll leaves the value the running pods have; the hub and the edge both restart onto it in the same rollout, so for those seconds a
