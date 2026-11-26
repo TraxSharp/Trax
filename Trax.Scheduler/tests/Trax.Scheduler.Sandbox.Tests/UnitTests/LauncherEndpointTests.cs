@@ -245,10 +245,13 @@ public class LauncherEndpointTests
         (await server.Client.GetStringAsync("/healthz")).Should().Be("ok");
     }
 
-    private static (LauncherEndpoint Endpoint, FakeTimeProvider Time) Endpoint()
+    private static (LauncherEndpoint Endpoint, FakeTimeProvider Time) Endpoint(
+        int maxInputBytes = 1024
+    )
     {
         var options = LauncherOptions.Podman();
         options.Caps.MaxConcurrent = 1;
+        options.Caps.MaxInputBytes = maxInputBytes;
         var time = new FakeTimeProvider(TimeProvider.System.GetUtcNow());
         var endpoint = new LauncherEndpoint(
             options,
@@ -279,65 +282,125 @@ public class LauncherEndpointTests
         return context;
     }
 
+    /// <summary>Unauthenticated requests whose bodies have sent <paramref name="bytes"/> each and then stall, until the endpoint holds all of them.</summary>
+    private static async Task<(
+        List<Pipe> Pipes,
+        List<DefaultHttpContext> Contexts,
+        List<Task> Handled
+    )> StallAsync(LauncherEndpoint endpoint, TimeProvider time, int count, long bytes)
+    {
+        var pipes = Enumerable.Range(0, count).Select(_ => new Pipe()).ToList();
+        var contexts = pipes.Select(p => Unauthenticated(time, p.Reader.AsStream())).ToList();
+        var handled = contexts.Select(endpoint.HandleAsync).ToList();
+        foreach (var pipe in pipes)
+            await pipe.Writer.WriteAsync(new byte[bytes]).ConfigureAwait(false);
+        await HeldAsync(endpoint, count * bytes).ConfigureAwait(false);
+        return (pipes, contexts, handled);
+    }
+
+    private static async Task HeldAsync(LauncherEndpoint endpoint, long bytes)
+    {
+        using var give = new CancellationTokenSource(TimeSpan.FromSeconds(10), TimeProvider.System);
+        // determinism: waits on the endpoint's own count, which the read loop updates as bytes arrive.
+        while (endpoint.UnverifiedBytes != bytes)
+            await Task.Delay(TimeSpan.FromMilliseconds(5), TimeProvider.System, give.Token)
+                .ConfigureAwait(false);
+    }
+
     [Test]
-    public async Task Post_PastTheBodiesBeingRead_IsA503Unread()
+    public async Task Post_PastTheUnverifiedByteBudget_IsA503Unread()
     {
         var (endpoint, time) = Endpoint();
-        var pipes = Enumerable.Range(0, endpoint.MaxPendingReads).Select(_ => new Pipe()).ToList();
-        var held = pipes
-            .Select(p => endpoint.HandleAsync(Unauthenticated(time, p.Reader.AsStream())))
-            .ToList();
+        var held = await StallAsync(endpoint, time, 3, endpoint.MaxBodyBytes);
+        endpoint.UnverifiedBytes.Should().Be(endpoint.MaxUnverifiedBytes);
 
         var refused = Unauthenticated(time, new MemoryStream("{}"u8.ToArray()));
         await endpoint.HandleAsync(refused);
 
         refused.Response.StatusCode.Should().Be(StatusCodes.Status503ServiceUnavailable, Adr);
-        foreach (var pipe in pipes)
+        refused.Response.Headers.RetryAfter.ToString().Should().Be("1");
+        foreach (var pipe in held.Pipes)
             await pipe.Writer.CompleteAsync();
-        await Task.WhenAll(held);
+        await Task.WhenAll(held.Handled);
+        endpoint.UnverifiedBytes.Should().Be(0, "a finished read gives its bytes back");
         var next = Unauthenticated(time, new MemoryStream("{}"u8.ToArray()));
         await endpoint.HandleAsync(next);
-        next.Response.StatusCode.Should()
-            .Be(StatusCodes.Status401Unauthorized, "a finished read gives its place back");
+        next.Response.StatusCode.Should().Be(StatusCodes.Status401Unauthorized);
     }
 
     [Test]
-    public async Task Post_ABodyThatOutlastsTheFreshnessWindow_IsDroppedAndGivesItsPlaceBack()
+    public async Task Post_DeclaringMoreThanTheBudgetLeft_IsA503Unread()
+    {
+        var (endpoint, time) = Endpoint();
+        var held = await StallAsync(endpoint, time, 3, endpoint.MaxBodyBytes - 10);
+        var body = new MemoryStream(new byte[16]);
+        var refused = Unauthenticated(time, body);
+        refused.Request.ContentLength = 31;
+
+        await endpoint.HandleAsync(refused);
+
+        refused.Response.StatusCode.Should().Be(StatusCodes.Status503ServiceUnavailable, Adr);
+        body.Position.Should().Be(0, "nothing of it is read");
+        foreach (var pipe in held.Pipes)
+            await pipe.Writer.CompleteAsync();
+        await Task.WhenAll(held.Handled);
+    }
+
+    [Test]
+    public async Task Post_ABodyThatSendsNothing_IsDroppedAfterTheGraceNotTheWindow()
     {
         var (endpoint, time) = Endpoint();
         var pipe = new Pipe();
         var slow = Unauthenticated(time, pipe.Reader.AsStream());
         var handled = endpoint.HandleAsync(slow);
 
-        time.Advance(NonceCache.Window + TimeSpan.FromSeconds(1));
+        time.Advance(LauncherEndpoint.BodyGrace + TimeSpan.FromSeconds(1));
         await handled.WaitAsync(
             TimeSpan.FromSeconds(10),
             TimeProvider.System,
             CancellationToken.None
         );
 
-        slow.Response.StatusCode.Should().Be(StatusCodes.Status401Unauthorized, Adr);
+        slow.Response.StatusCode.Should().Be(StatusCodes.Status408RequestTimeout, Adr);
         await pipe.Writer.CompleteAsync();
     }
 
     [Test]
-    public async Task Post_EverySlowBodyDroppedAtTheWindow_LeavesTheNextRequestRead()
+    public async Task Post_BodiesDroppedForTheirPace_GiveTheirBytesBack()
     {
         var (endpoint, time) = Endpoint();
-        var pipes = Enumerable.Range(0, endpoint.MaxPendingReads).Select(_ => new Pipe()).ToList();
-        var slow = pipes
-            .Select(p => endpoint.HandleAsync(Unauthenticated(time, p.Reader.AsStream())))
-            .ToList();
+        var held = await StallAsync(endpoint, time, 3, endpoint.MaxBodyBytes);
 
-        time.Advance(NonceCache.Window + TimeSpan.FromSeconds(1));
-        await Task.WhenAll(slow)
+        time.Advance(TimeSpan.FromSeconds(10));
+        await Task.WhenAll(held.Handled)
             .WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System, CancellationToken.None);
         var next = Unauthenticated(time, new MemoryStream("{}"u8.ToArray()));
         await endpoint.HandleAsync(next);
 
+        held.Contexts.Select(c => c.Response.StatusCode)
+            .Should()
+            .AllBeEquivalentTo(StatusCodes.Status408RequestTimeout);
+        endpoint.UnverifiedBytes.Should().Be(0);
         next.Response.StatusCode.Should()
-            .Be(StatusCodes.Status401Unauthorized, "a dropped body gives its place back; " + Adr);
-        foreach (var pipe in pipes)
+            .Be(StatusCodes.Status401Unauthorized, "a dropped body gives its bytes back; " + Adr);
+        foreach (var pipe in held.Pipes)
             await pipe.Writer.CompleteAsync();
+    }
+
+    [Test]
+    public async Task Post_ABodyThatKeepsPace_IsReadPastTheGrace()
+    {
+        // 2 MiB earns two seconds past the grace at the minimum rate.
+        var (endpoint, time) = Endpoint(maxInputBytes: 1024 * 1024);
+        var held = await StallAsync(endpoint, time, 1, 2 * LauncherEndpoint.MinBodyBytesPerSecond);
+
+        time.Advance(LauncherEndpoint.BodyGrace + TimeSpan.FromSeconds(1));
+        await held.Pipes[0].Writer.CompleteAsync();
+        await held.Handled[0]
+            .WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System, CancellationToken.None);
+
+        held.Contexts[0]
+            .Response.StatusCode.Should()
+            .Be(StatusCodes.Status401Unauthorized, "it was read to the end and its MAC checked");
     }
 }

@@ -1,3 +1,5 @@
+using System.Buffers;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Http;
@@ -15,9 +17,13 @@ namespace Trax.Scheduler.Sandbox.Launcher.Core;
 /// </summary>
 /// <remarks>
 /// The form and freshness check costs a caller without the key nothing to pass, so it is not what
-/// bounds the body reads. That is <see cref="MaxPendingReads"/> bodies read at once, each up to
-/// <see cref="MaxBodyBytes"/> and each within the freshness window; past that a request gets a
-/// bare 503 unread.
+/// bounds the body reads. Bytes and time are: every body not yet verified draws on one budget of
+/// <see cref="MaxUnverifiedBytes"/> as its bytes arrive, so a request that sends nothing holds
+/// nothing; and a body must keep arriving at <see cref="MinBodyBytesPerSecond"/> after a
+/// <see cref="BodyGrace"/>, so one that stalls is dropped with a bare 408 within seconds rather than
+/// at the end of the freshness window. A body the budget cannot take gets a bare 503 with
+/// <c>Retry-After</c>. Holding the budget therefore costs a caller without the key a steady stream
+/// of bytes, not a handful of idle connections.
 /// </remarks>
 internal sealed partial class LauncherEndpoint(
     SandboxLauncherOptions options,
@@ -29,13 +35,22 @@ internal sealed partial class LauncherEndpoint(
 {
     public const string Route = "/trax/sandbox/run";
 
-    private readonly SemaphoreSlim _reads = new(
-        options.Caps.MaxConcurrent + 2,
-        options.Caps.MaxConcurrent + 2
-    );
+    /// <summary>How long a body may take to start arriving before it must keep pace.</summary>
+    public static readonly TimeSpan BodyGrace = TimeSpan.FromSeconds(5);
 
-    /// <summary>How many bodies are read at once before their MAC is checked: the runs the launcher may take, and two more.</summary>
-    public int MaxPendingReads => options.Caps.MaxConcurrent + 2;
+    /// <summary>The slowest a body may arrive after <see cref="BodyGrace"/>: 1 MiB a second, which a hub on the same node or cluster network beats by far.</summary>
+    public const long MinBodyBytesPerSecond = 1024 * 1024;
+
+    private long _unverified;
+
+    /// <summary>
+    /// The most bytes of bodies not yet verified held at once, by every request together: as many
+    /// largest bodies as the runs the launcher may take, and two more.
+    /// </summary>
+    public long MaxUnverifiedBytes => (options.Caps.MaxConcurrent + 2) * MaxBodyBytes;
+
+    /// <summary>The bytes of bodies not yet verified held now.</summary>
+    internal long UnverifiedBytes => Interlocked.Read(ref _unverified);
 
     /// <summary>The largest body read: the input cap as JSON-escaped text (six bytes a character at worst), plus the rest of the request.</summary>
     public long MaxBodyBytes => (long)options.Caps.MaxInputBytes * 6 + 64 * 1024;
@@ -88,67 +103,112 @@ internal sealed partial class LauncherEndpoint(
     }
 
     /// <summary>
-    /// The body, read while holding one of <see cref="MaxPendingReads"/> places and within the
-    /// freshness window; null, with the status set, when there is no place, it is too large, or it
-    /// did not arrive in time.
+    /// The body, read against the shared budget and the pace a body must keep; null, with the
+    /// status set, when it is too large, the budget cannot take it, or it did not keep pace.
     /// </summary>
     private async Task<byte[]?> ReadBoundedAsync(HttpContext context)
     {
-        if (!await _reads.WaitAsync(TimeSpan.Zero, context.RequestAborted).ConfigureAwait(false))
+        if (context.Request.ContentLength is { } declared)
         {
-            logger.LogWarning(
-                "Refused a sandbox request unread: {Pending} bodies are already being read.",
-                MaxPendingReads
-            );
-            context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
-            return null;
+            if (declared > MaxBodyBytes)
+            {
+                context.Response.StatusCode = StatusCodes.Status413PayloadTooLarge;
+                return null;
+            }
+            if (declared > MaxUnverifiedBytes - UnverifiedBytes)
+                return Busy(context);
         }
 
+        var held = new StrongBox<long>();
         try
         {
-            var body = await ReadBodyAsync(context).ConfigureAwait(false);
-            if (body is null)
-                context.Response.StatusCode = StatusCodes.Status413PayloadTooLarge;
-            return body;
+            return await ReadPacedAsync(context, held).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (!context.RequestAborted.IsCancellationRequested)
         {
-            // Past the window the signature is stale anyway.
-            await UnauthorizedAsync(context, "body did not arrive within the freshness window")
-                .ConfigureAwait(false);
+            logger.LogWarning(
+                "Dropped an unauthenticated sandbox request: its body did not keep pace ({Bytes} bytes arrived).",
+                held.Value
+            );
+            context.Response.StatusCode = StatusCodes.Status408RequestTimeout;
             return null;
         }
         finally
         {
-            _reads.Release();
+            Interlocked.Add(ref _unverified, -held.Value);
         }
     }
 
-    private async Task<byte[]?> ReadBodyAsync(HttpContext context)
+    /// <summary>The body, each chunk taken from the budget into <paramref name="held"/> as it arrives; cancelled when it falls behind its pace.</summary>
+    private async Task<byte[]?> ReadPacedAsync(HttpContext context, StrongBox<long> held)
     {
-        if (context.Request.ContentLength is { } declared && declared > MaxBodyBytes)
-            return null;
-        using var window = new CancellationTokenSource(NonceCache.Window, time);
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(
-            context.RequestAborted,
-            window.Token
-        );
-        using var buffer = new MemoryStream();
-        var chunk = new byte[81920];
-        int read;
-        while (
-            (
-                read = await context
-                    .Request.Body.ReadAsync(chunk, deadline.Token)
-                    .ConfigureAwait(false)
-            ) > 0
-        )
+        var chunk = ArrayPool<byte>.Shared.Rent(16 * 1024);
+        try
         {
-            if (buffer.Length + read > MaxBodyBytes)
-                return null;
-            await buffer.WriteAsync(chunk.AsMemory(0, read), deadline.Token).ConfigureAwait(false);
+            var start = time.GetUtcNow();
+            using var pace = new CancellationTokenSource(Pace(0), time);
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(
+                context.RequestAborted,
+                pace.Token
+            );
+            using var buffer = new MemoryStream();
+            int read;
+            while (
+                (
+                    read = await context
+                        .Request.Body.ReadAsync(chunk, deadline.Token)
+                        .ConfigureAwait(false)
+                ) > 0
+            )
+            {
+                if (buffer.Length + read > MaxBodyBytes)
+                {
+                    context.Response.StatusCode = StatusCodes.Status413PayloadTooLarge;
+                    return null;
+                }
+                if (Interlocked.Add(ref _unverified, read) > MaxUnverifiedBytes)
+                {
+                    Interlocked.Add(ref _unverified, -read);
+                    return Busy(context);
+                }
+                held.Value += read;
+                await buffer
+                    .WriteAsync(chunk.AsMemory(0, read), deadline.Token)
+                    .ConfigureAwait(false);
+                var left = Pace(held.Value) - (time.GetUtcNow() - start);
+                if (left <= TimeSpan.Zero)
+                    await pace.CancelAsync().ConfigureAwait(false);
+                else
+                    pace.CancelAfter(left);
+            }
+            return buffer.ToArray();
         }
-        return buffer.ToArray();
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(chunk);
+        }
+    }
+
+    /// <summary>
+    /// How long after its start a body that has sent <paramref name="received"/> bytes may wait for
+    /// more: the grace, then the time those bytes earn at the minimum rate, and never past the
+    /// freshness window, beyond which the signature is stale anyway.
+    /// </summary>
+    private static TimeSpan Pace(long received)
+    {
+        var earned = BodyGrace + TimeSpan.FromSeconds((double)received / MinBodyBytesPerSecond);
+        return earned < NonceCache.Window ? earned : NonceCache.Window;
+    }
+
+    private byte[]? Busy(HttpContext context)
+    {
+        logger.LogWarning(
+            "Turned a sandbox request away unread: {Bytes} bytes of unverified bodies are already held.",
+            UnverifiedBytes
+        );
+        context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+        context.Response.Headers.RetryAfter = "1";
+        return null;
     }
 
     private Task UnauthorizedAsync(HttpContext context, string why)

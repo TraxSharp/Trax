@@ -109,7 +109,13 @@ Per request, on `POST /trax/sandbox/run` (`GET /healthz` answers `ok`):
 
 1. A missing, malformed, stale (over 60 seconds either way) or wrongly signed request, or one whose
    nonce was already accepted, gets a bare 401 and nothing else. A body over the input cap gets 413
-   unread.
+   unread. Until its signature is checked, a body draws on one budget shared by every request,
+   `MaxConcurrent + 2` largest bodies (the input cap as escaped JSON, plus 64 KiB), as its bytes
+   arrive: one the budget cannot take gets a bare 503 with `Retry-After: 1`. A body must start
+   within 5 seconds and then keep arriving at 1 MiB a second, or it is dropped with a bare 408. A
+   request that sends nothing holds nothing, so keeping the hub out costs a caller without the key
+   a steady stream of bytes. The hub's client reports each of these by what it means, not as a
+   key mismatch.
 2. A request that is not the fixed shape, names an unknown profile, or asks for more than a cap is
    refused: 400, a signed `Refused` answer with the reason.
 3. Past `MaxConcurrent`: 429, a signed `Busy` answer.

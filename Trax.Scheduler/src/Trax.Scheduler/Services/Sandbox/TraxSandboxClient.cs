@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net;
 using System.Net.Http.Headers;
 using System.Reflection;
 using System.Security.Cryptography;
@@ -192,16 +193,31 @@ internal sealed class TraxSandboxClient(
             ? values.FirstOrDefault()
             : null;
         if (!SandboxChannelSignature.VerifyResponse(key, signature, responseSignature, bytes))
-            throw Failed(
-                request,
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"the answer (HTTP {(int)answer.StatusCode}) is not signed by the launcher "
-                ) + "for this request; check that hub and launcher share the key"
-            );
+            throw Failed(request, UnsignedReason(answer.StatusCode));
 
         return Parse(request, bytes);
     }
+
+    /// <summary>
+    /// Why an unsigned answer is not read. A launcher answers before checking the key only when it
+    /// turned the request away unread or dropped it for its pace; anything else unsigned is a key
+    /// the two sides do not share. None of it is trusted: the run fails either way.
+    /// </summary>
+    private static string UnsignedReason(HttpStatusCode status) =>
+        status switch
+        {
+            HttpStatusCode.ServiceUnavailable =>
+                "the launcher turned the request away unread (HTTP 503): it is already holding as "
+                    + "many unverified request bodies as it will",
+            HttpStatusCode.RequestTimeout =>
+                "the launcher dropped the request (HTTP 408): its body did not arrive fast enough",
+            HttpStatusCode.RequestEntityTooLarge =>
+                "the launcher refused the request unread (HTTP 413): it is larger than the launcher's input cap allows",
+            _ => string.Create(
+                CultureInfo.InvariantCulture,
+                $"the answer (HTTP {(int)status}) is not signed by the launcher "
+            ) + "for this request; check that hub and launcher share the key",
+        };
 
     private static SandboxRunResponse Parse(SandboxRunRequest request, byte[] bytes)
     {

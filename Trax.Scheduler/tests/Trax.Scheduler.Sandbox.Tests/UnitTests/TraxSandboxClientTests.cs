@@ -207,6 +207,32 @@ public class TraxSandboxClientTests
         thrown.Message.Should().Contain("not signed");
     }
 
+    [TestCase(HttpStatusCode.ServiceUnavailable, "turned the request away unread (HTTP 503)")]
+    [TestCase(HttpStatusCode.RequestTimeout, "did not arrive fast enough")]
+    [TestCase(HttpStatusCode.Unauthorized, "check that hub and launcher share the key")]
+    public async Task RunAsync_UnsignedRefusal_SaysWhatTheLauncherDid(
+        HttpStatusCode status,
+        string reason
+    )
+    {
+        var launcher = new FakeLauncher(SandboxHosts.Key)
+        {
+            Unsigned = true,
+            Status = status,
+            RawBody = [],
+        };
+
+        var thrown = (
+            await FluentActions
+                .Awaiting(() => RunAsync(launcher))
+                .Should()
+                .ThrowAsync<SandboxRunException>()
+        ).Which;
+
+        thrown.Outcome.Should().Be(SandboxOutcome.Failed);
+        thrown.Message.Should().Contain(reason);
+    }
+
     [Test]
     public async Task RunAsync_AnswerSignedWithAnotherKey_IsNotRead()
     {
