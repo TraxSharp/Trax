@@ -1394,7 +1394,8 @@ jobs:
         run: |
           outside=$(getent ahostsv4 one.one.one.one | awk 'NR == 1 { print $1 }')
           echo "one.one.one.one resolved to $outside"
-          E2E_OUTSIDE=$outside test/e2e.sh localhost/trax-egress:ci api.github.com
+          # harden-runner answers UDP DNS itself, so only the TCP half of the outside DNS probe is controlled here.
+          E2E_OUTSIDE=$outside E2E_UDP_CONTROL=0 test/e2e.sh localhost/trax-egress:ci api.github.com
       - name: Install qemu for the arm64 build
         run: |
           sudo apt-get update -q

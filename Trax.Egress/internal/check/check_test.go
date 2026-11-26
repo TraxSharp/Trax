@@ -3,6 +3,8 @@ package check
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
+	"io"
 	"net"
 	"os"
 	"strings"
@@ -30,6 +32,7 @@ func TestProbesCoverTheListAndTheDefaults(t *testing.T) {
 		"tcp 169.254.170.23:80 open",
 		"dns example.com blocked",
 		"dns example.com @1.1.1.1 blocked",
+		"dns example.com @1.1.1.1 over tcp blocked",
 		"tls example.com via 1.1.1.1:443 blocked",
 		"tcp 169.254.169.254:80 blocked",
 		"tcp 10.0.0.1:80 blocked",
@@ -123,7 +126,7 @@ func TestTheOutsideProbesUseTheGivenAddress(t *testing.T) {
 		names = append(names, p.Kind+" "+p.Target)
 	}
 	got := strings.Join(names, "\n")
-	for _, want := range []string{"dns example.com @1.0.0.1", "tls example.com via 1.0.0.1:443"} {
+	for _, want := range []string{"dns example.com @1.0.0.1", "dns example.com @1.0.0.1 over tcp", "tls example.com via 1.0.0.1:443"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("no probe %q in\n%s", want, got)
 		}
@@ -144,5 +147,45 @@ func TestParseOutside(t *testing.T) {
 		if _, err := ParseOutside(bad); err == nil {
 			t.Errorf("%q was accepted", bad)
 		}
+	}
+}
+
+func TestDnsOverTcpReadsTheAnswer(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	go func() {
+		c, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer c.Close()
+		head := make([]byte, 2)
+		if _, err := io.ReadFull(c, head); err != nil {
+			return
+		}
+		q := make([]byte, binary.BigEndian.Uint16(head))
+		if _, err := io.ReadFull(c, q); err != nil {
+			return
+		}
+		reply := append([]byte(nil), q...)
+		reply[2], reply[3] = 0x81, 0x80 // a response, no error
+		reply[7] = 1                    // one answer
+		reply = append(reply, 0xc0, 0x0c, 0, 1, 0, 1, 0, 0, 0, 60, 0, 4, 93, 184, 215, 14)
+		_, _ = c.Write(append(binary.BigEndian.AppendUint16(nil, uint16(len(reply))), reply...))
+	}()
+	if got := dnsDirectTCP(context.Background(), ln.Addr().String(), "example.com"); got != Open {
+		t.Errorf("an answering server: %s, want %s", got, Open)
+	}
+	closed, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := closed.Addr().String()
+	closed.Close()
+	if got := dnsDirectTCP(context.Background(), addr, "example.com"); got != Blocked {
+		t.Errorf("nothing listening: %s, want %s", got, Blocked)
 	}
 }

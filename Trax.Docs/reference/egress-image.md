@@ -156,7 +156,7 @@ init containers again.
 ## Proving it
 
 `check` runs as the app would and probes what the list allows (each must open) and what it must not (each must be
-blocked): an unlisted name, the same name asked of `1.1.1.1` directly, a TLS connection to `1.1.1.1:443` asking for
+blocked): an unlisted name, the same name asked of `1.1.1.1` directly over UDP and over TCP, a TLS connection to `1.1.1.1:443` asking for
 it, instance metadata, the EKS Pod Identity agent, each private range, the tailnet's resolver, a public IPv6 address,
 and `nft list ruleset` and `nft flush ruleset`. Add more with `TRAX_EGRESS_CHECK_DENY` (`host:port`, separated by
 spaces or commas), such as the host's WAN address or a peer. Its first probe is a control: a connection to

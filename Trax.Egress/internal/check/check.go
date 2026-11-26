@@ -115,6 +115,9 @@ func Probes(list allow.List, deny []string, outside string) []Probe {
 			Probe{"dns", unlisted + " @" + outside, Blocked, func(ctx context.Context) string {
 				return dnsDirect(ctx, net.JoinHostPort(outside, "53"), unlisted)
 			}},
+			Probe{"dns", unlisted + " @" + outside + " over tcp", Blocked, func(ctx context.Context) string {
+				return dnsDirectTCP(ctx, net.JoinHostPort(outside, "53"), unlisted)
+			}},
 			Probe{"tls", unlisted + " via " + outside + ":443", Blocked, func(ctx context.Context) string {
 				return tlsProbe(ctx, net.JoinHostPort(outside, "443"), unlisted)
 			}},
@@ -252,22 +255,53 @@ func dnsDirect(ctx context.Context, server, name string) string {
 		return Blocked
 	}
 	defer c.Close()
+	_ = c.SetDeadline(time.Now().Add(3 * time.Second))
+	if _, err := c.Write(dnsQuery(name)); err != nil {
+		return Blocked
+	}
+	buf := make([]byte, 1500)
+	n, err := c.Read(buf)
+	if err != nil {
+		return Blocked
+	}
+	return dnsAnswered(buf[:n])
+}
+
+// dnsDirectTCP asks server for name over TCP, the way a resolver falls back when UDP is dropped.
+func dnsDirectTCP(ctx context.Context, server, name string) string {
+	c, err := dialTimeout(ctx, "tcp", server, 3*time.Second)
+	if err != nil {
+		return Blocked
+	}
+	defer c.Close()
+	_ = c.SetDeadline(time.Now().Add(3 * time.Second))
+	q := dnsQuery(name)
+	if _, err := c.Write(append(binary.BigEndian.AppendUint16(nil, uint16(len(q))), q...)); err != nil {
+		return Blocked
+	}
+	head := make([]byte, 2)
+	if _, err := io.ReadFull(c, head); err != nil {
+		return Blocked
+	}
+	buf := make([]byte, binary.BigEndian.Uint16(head))
+	if _, err := io.ReadFull(c, buf); err != nil {
+		return Blocked
+	}
+	return dnsAnswered(buf)
+}
+
+func dnsQuery(name string) []byte {
 	q := []byte{0x13, 0x37, 0x01, 0x00, 0, 1, 0, 0, 0, 0, 0, 0}
 	for _, l := range strings.Split(name, ".") {
 		q = append(q, byte(len(l)))
 		q = append(q, l...)
 	}
-	q = append(q, 0, 0, 1, 0, 1)
-	_ = c.SetDeadline(time.Now().Add(3 * time.Second))
-	if _, err := c.Write(q); err != nil {
-		return Blocked
-	}
-	buf := make([]byte, 1500)
-	n, err := c.Read(buf)
-	if err != nil || n < 12 {
-		return Blocked
-	}
-	if buf[3]&0xF == 0 && binary.BigEndian.Uint16(buf[6:8]) > 0 {
+	return append(q, 0, 0, 1, 0, 1)
+}
+
+// dnsAnswered is Open for a reply with no error and at least one answer.
+func dnsAnswered(reply []byte) string {
+	if len(reply) >= 12 && reply[3]&0xF == 0 && binary.BigEndian.Uint16(reply[6:8]) > 0 {
 		return Open
 	}
 	return Blocked

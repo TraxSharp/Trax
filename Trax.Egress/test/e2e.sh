@@ -104,10 +104,20 @@ else
   echo "!! $outside:443 does not answer without the egress, so the probe that it is blocked would prove nothing"
   exit 1
 fi
-if control "nslookup -type=a example.com $outside >/dev/null"; then
-  echo "-> DNS on $outside:53 answers without the egress"
+if control "nc -z -w 5 $outside 53"; then
+  echo "-> DNS over TCP on $outside:53 answers without the egress"
 else
-  echo "!! DNS on $outside:53 does not answer without the egress, so the probe that it is blocked would prove nothing"
+  echo "!! $outside:53 does not answer over TCP without the egress, so the probe that it is blocked would prove nothing"
+  exit 1
+fi
+# DNS over UDP to an outside resolver: CI's harden-runner answers every UDP query itself, so there the UDP probe
+# cannot be told apart from the firewall and E2E_UDP_CONTROL=0 says so. Everywhere else it is checked too.
+if [ "${E2E_UDP_CONTROL:-1}" = 0 ]; then
+  echo "-- DNS over UDP to $outside is not checked here (E2E_UDP_CONTROL=0); its probe rests on the rules' tests"
+elif control "nslookup -type=a example.com $outside >/dev/null"; then
+  echo "-> DNS over UDP on $outside:53 answers without the egress"
+else
+  echo "!! DNS over UDP on $outside:53 does not answer without the egress, so the probe that it is blocked would prove nothing"
   exit 1
 fi
 
