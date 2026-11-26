@@ -575,8 +575,12 @@ public class KubernetesDeployerTests
             CancellationToken ct
         ) => Task.FromResult(ClusterObjects.GetValueOrDefault($"{kind}/{name}"));
 
+        /// <summary>Called with each object before it is applied; throws to stand for the API refusing it.</summary>
+        public Action<IKubernetesObject<V1ObjectMeta>>? OnApply { get; set; }
+
         public Task ApplyAsync(IKubernetesObject<V1ObjectMeta> body, CancellationToken ct)
         {
+            OnApply?.Invoke(body);
             Calls.Add($"apply {body.Kind}/{body.Metadata.Name}");
             Applied.Add(body);
             return Task.CompletedTask;

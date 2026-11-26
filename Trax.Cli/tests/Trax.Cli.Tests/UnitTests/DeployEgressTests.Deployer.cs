@@ -131,6 +131,33 @@ public partial class DeployEgressTests
     }
 
     [Test]
+    public async Task A_narrowing_the_cluster_refuses_still_ends_the_drain()
+    {
+        var (deployer, cluster) = Deployer();
+        cluster.Deployments["hub"] = HeldBefore(PreviousImage);
+        var policies = 0;
+        cluster.OnApply = o =>
+        {
+            if (o is V1ValidatingAdmissionPolicy && ++policies == 2)
+                throw new HttpRequestException("the connection was reset");
+        };
+
+        await FluentActions
+            .Awaiting(() => Deploy(deployer))
+            .Should()
+            .ThrowAsync<HttpRequestException>();
+
+        cluster
+            .Calls.Should()
+            .Contain(
+                c =>
+                    c.StartsWith("wait-job", StringComparison.Ordinal)
+                    && c.Contains("-resume-", StringComparison.Ordinal),
+                "the services rolled, so the hosts must not be left drained"
+            );
+    }
+
+    [Test]
     public async Task A_rolled_back_deploy_leaves_the_previous_egress_image_allowed()
     {
         var (deployer, cluster) = Deployer();

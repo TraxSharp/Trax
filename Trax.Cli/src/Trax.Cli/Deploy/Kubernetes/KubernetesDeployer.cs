@@ -96,14 +96,14 @@ internal sealed class KubernetesDeployer(
                 failed
             );
         }
-        if (!ReferenceEquals(admission, manifests.Admission))
-            await NarrowEgressAdmissionAsync(manifests, ct).ConfigureAwait(false);
         if (drained)
         {
             var resumed = await ResumeAsync(manifests, ct).ConfigureAwait(false);
             if (resumed.Length > 0)
                 say(resumed.Trim());
         }
+        if (!ReferenceEquals(admission, manifests.Admission))
+            await NarrowEgressAdmissionAsync(manifests, ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -133,7 +133,10 @@ internal sealed class KubernetesDeployer(
         return admission;
     }
 
-    /// <summary>Puts the egress admission policy back to this deploy's image alone, once the services are up.</summary>
+    /// <summary>
+    /// Puts the egress admission policy back to this deploy's image alone, once the services are up and the drain has
+    /// ended, so a refusal here does not leave every host idle until the drain lapses.
+    /// </summary>
     private async Task NarrowEgressAdmissionAsync(
         KubernetesManifests manifests,
         CancellationToken ct
