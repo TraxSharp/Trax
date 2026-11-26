@@ -56,13 +56,14 @@ test("a drain set elsewhere shows once the scheduler change signal arrives", asy
 });
 
 test("a drain that lapses drops the mark at its until, with no signal", async () => {
-  const lapses = Date.now() + 300;
-  open(() => {
-    const now = Date.now();
-    return { drained: now < lapses, until: now < lapses ? new Date(lapses).toISOString() : null };
-  });
+  // The host says drained until the test lets it lapse, so a slow first render still finds the mark;
+  // the header's own timer, a second past the until, is the only read that can see it gone.
+  const until = new Date(Date.now() + 300).toISOString();
+  let lapsed = false;
+  open(() => (lapsed ? { drained: false, until: null } : { drained: true, until }));
   expect(await header().findByRole("link", { name: "Drained" })).toBeInTheDocument();
 
+  lapsed = true;
   await waitFor(() => expect(header().queryByRole("link", { name: "Drained" })).not.toBeInTheDocument(), {
     timeout: 5000,
   });
