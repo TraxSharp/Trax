@@ -3,6 +3,7 @@ using Trax.Effect.Enums;
 using Trax.Effect.Models.DeadLetter;
 using Trax.Effect.Services.EffectJunction;
 using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Services.Drain;
 using Trax.Scheduler.Trains.ManifestManager;
 using Trax.Scheduler.Trains.ManifestManager.Utilities;
 
@@ -20,7 +21,8 @@ namespace Trax.Scheduler.Trains.ManifestManager.Junctions;
 internal sealed class DetermineJobsToQueueJunction(
     ILogger<DetermineJobsToQueueJunction> logger,
     SchedulerConfiguration config,
-    TimeProvider timeProvider
+    TimeProvider timeProvider,
+    IServiceProvider services
 ) : EffectJunction<(List<ManifestDispatchView>, List<DeadLetter>), List<ManifestDispatchView>>
 {
     public override async Task<List<ManifestDispatchView>> Run(
@@ -32,6 +34,16 @@ internal sealed class DetermineJobsToQueueJunction(
         logger.LogDebug(
             "Starting DetermineJobsToQueueJunction to identify manifests due for execution"
         );
+
+        // A drain stops every host queuing scheduled work (Trax.Docs/adr/0065). Nothing due now is
+        // queued, and a schedule that came due meanwhile is a misfire once the drain ends: its
+        // manifest's misfire policy decides whether it runs then. The reapers before this junction
+        // keep running, so a run past its timeout still ends while drained.
+        if (await SchedulerDrain.IsDrainedAsync(services, CancellationToken).ConfigureAwait(false))
+        {
+            logger.LogDebug("Drained: the ManifestManager queues no scheduled run this cycle");
+            return [];
+        }
 
         var now = timeProvider.GetUtcNow().UtcDateTime;
         var viewsToQueue = new List<ManifestDispatchView>();

@@ -40,6 +40,9 @@ public class PublicApiSurfaceTests
         yield return new TestCaseData(
             typeof(Trax.Runner.Lambda.TraxLambdaFunction).Assembly
         ).SetName("Trax.Runner.Lambda");
+        yield return new TestCaseData(
+            typeof(Trax.Scheduler.Sandbox.Launcher.TraxSandboxLauncher).Assembly
+        ).SetName("Trax.Scheduler.Sandbox.Launcher");
     }
 
     /// <summary>

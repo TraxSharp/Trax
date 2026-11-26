@@ -29,6 +29,7 @@ created at runtime through `ITraxScheduler`. How the scheduler works is on
 | [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner) | A runner process, with `UseTraxJobRunner` and `UseTraxRunEndpoint` |
 | [AddTraxWorker](/docs/sdk-reference/scheduler-api/add-trax-worker) | A standalone worker that polls `background_job` |
 | [AddTraxSchedulerLiveness](/docs/sdk-reference/scheduler-api/add-trax-scheduler-liveness) | The health check that fails when dispatch stops |
+| [AddTraxSandbox](/docs/sdk-reference/scheduler-api/add-trax-sandbox) | Runs a `[TraxSandbox]` train in a fresh sandbox through the launcher, and the entry point inside it |
 
 ### Scheduling
 
@@ -50,6 +51,12 @@ created at runtime through `ITraxScheduler`. How the scheduler works is on
 | [IEffectSettingsService](/docs/sdk-reference/scheduler-api/i-effect-settings-service) | This process's effects and their settings |
 | [ILogLevelService](/docs/sdk-reference/scheduler-api/i-log-level-service) | This process's log levels |
 | [IDeadLetterRequeueJobs](/docs/sdk-reference/scheduler-api/i-dead-letter-requeue-jobs) | Requeue-all as a background job on this node |
+
+## Trax.Scheduler.Sandbox.Launcher
+
+| Page | What it documents |
+|------|-------------------|
+| [Sandbox launcher](/docs/sdk-reference/scheduler-api/trax-sandbox-launcher) | The one process that starts sandboxes, its options, and the cluster objects it needs |
 
 ## Trax.Scheduler.Sqs
 

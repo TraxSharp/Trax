@@ -37,7 +37,7 @@ The format is `.claude/skills/recording-decisions/ADR-FORMAT.md`.
 
 | Area | ADRs |
 | --- | --- |
-| `platform` | [0001](./0001-the-machine-toolchain-is-half-in-process.md), [0006](./0006-a-podman-environment-is-written-as-quadlet-units-not-run.md) |
+| `platform` | [0001](./0001-the-machine-toolchain-is-half-in-process.md), [0006](./0006-a-podman-environment-is-written-as-quadlet-units-not-run.md), [0007](./0007-hubs-roll-with-overlap-after-a-drain.md) |
 | `tooling` | [0001](./0001-the-machine-toolchain-is-half-in-process.md), [0002](./0002-generated-code-refuses-a-schema-name-it-cannot-emit.md), [0004](./0004-generate-force-replaces-only-on-success.md), [0005](./0005-a-machine-id-is-kebab-case.md), [0006](./0006-a-podman-environment-is-written-as-quadlet-units-not-run.md) |
 
 ## All of them
@@ -49,3 +49,4 @@ The format is `.claude/skills/recording-decisions/ADR-FORMAT.md`.
 | [0004](./0004-generate-force-replaces-only-on-success.md) | `generate --force` replaces its output only on success, and never a repository | tooling |
 | [0005](./0005-a-machine-id-is-kebab-case.md) | A machine id is kebab-case, and `trax machine` refuses any other | tooling |
 | [0006](./0006-a-podman-environment-is-written-as-quadlet-units-not-run.md) | A podman environment is written as Quadlet units, not run, with its secrets from `.env` outside the project | tooling, platform |
+| [0007](./0007-hubs-roll-with-overlap-after-a-drain.md) | A deploy drains the hosts before it rolls them, and then a hub's next copy starts beside the old one | platform |

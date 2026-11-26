@@ -1,0 +1,25 @@
+{
+  "version": 2,
+  "app": "scheduler",
+  "services": {
+    "scheduler": { "project": "../../../../templates/content/Trax.Samples.Scheduler/Trax.Samples.Scheduler.csproj", "memory": 512, "port": 18091 }
+  },
+  "settings": ["Trax__Proxy__KnownNetworks"],
+  "environments": {
+    "cluster": {
+      "target": "kubernetes",
+      "profile": "try",
+      "registry": "localhost:5001",
+      "database": { "inCluster": true },
+      "limits": { "database": { "memory": 768 } },
+      "settings": { "Trax__Proxy__KnownNetworks": "10.42.0.0/16" }
+    },
+    "home": {
+      "target": "kubernetes",
+      "runtime": "podman",
+      "profile": "try",
+      "database": { "inCluster": true },
+      "settings": { "Trax__Proxy__KnownNetworks": "10.88.0.0/16" }
+    }
+  }
+}

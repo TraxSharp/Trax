@@ -1,12 +1,13 @@
 ---
 title: System
-description: "Reference for the operations console's System area: hosts and heartbeats, the scheduler's switches and settings, log levels, effects, logs, live events."
+description: "Reference for the operations console's System area: hosts and heartbeats, the scheduler's switches, drain and settings, log levels, effects, logs, live events."
 type: reference
 area: dashboard
 nav_order: 9
 source:
   - Trax.Api/src/Trax.Api.Dashboard/ClientApp/src/pages/ClusterPage.tsx
   - Trax.Api/src/Trax.Api.Dashboard/ClientApp/src/pages/SettingsPage.tsx
+  - Trax.Api/src/Trax.Api.Dashboard/ClientApp/src/components/DrainPanel.tsx
   - Trax.Api/src/Trax.Api.Dashboard/ClientApp/src/pages/EffectsSettingsPage.tsx
   - Trax.Api/src/Trax.Api.Dashboard/ClientApp/src/pages/LogsPage.tsx
   - Trax.Api/src/Trax.Api.Dashboard/ClientApp/src/pages/RealTimePage.tsx
@@ -55,6 +56,22 @@ While either is paused, the header says so on every page.
 |---|---|---|
 | **Manifest manager** | Queues each manifest's run when its schedule comes due | No manifest is queued on its schedule. Work queued by hand is still started. |
 | **Job dispatcher** | Starts queued work on a worker | Queued work waits and nothing new starts from the queue. Runs already started finish. |
+
+### Drain and resume
+
+A drain stops every host sharing the database from starting new work: no host dispatches from the
+queue, queues a scheduled run or picks up a job, while work already running finishes. A deploy
+drains before it replaces the hosts and resumes after ([TraxDrain](/docs/sdk-reference/configuration/trax-drain));
+the panel shows a drain whoever set it.
+
+The panel says whether a drain is in force, until when and who set it (**a deploy**, or the
+operator), and lists what is busy: runs that are pending or in progress and state-machine instances
+not at rest, at most 50 with the total. **Drain** takes a length in minutes (20 by default, 1 to
+1440) and asks before it sends [`drain`](/docs/sdk-reference/graphql-api/mutations/config#drain);
+**Resume** asks before it sends [`resume`](/docs/sdk-reference/graphql-api/mutations/config#resume).
+A refusal is shown in the host's words. While a drain is in force the header shows **Drained** on
+every page, linking here. A schedule that comes due during a drain is handled by its manifest's
+misfire policy once the drain ends. The demo does not offer the panel: its recordings predate it.
 
 The other settings, a section each, each with its own **Save** and **Discard**. A section saves only
 the fields changed in it.

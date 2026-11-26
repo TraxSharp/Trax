@@ -14,7 +14,6 @@ internal static class AwsPlanSummary
     private const decimal NatGateway = 32.85m;
     private const decimal PublicAddress = 3.65m;
     private const decimal LoadBalancer = 16.43m;
-    private const decimal Task = 18.02m; // 0.5 vCPU, 1 GB, x86
     private const decimal SmallMultiAzDatabase = 51.32m; // db.t4g.small Multi-AZ, 20 GB gp3
     private const decimal MicroDatabase = 14.00m; // db.t4g.micro single-AZ, 20 GB gp3
 
@@ -48,15 +47,20 @@ internal static class AwsPlanSummary
                     ? ("Database, db.t4g.small Multi-AZ", SmallMultiAzDatabase)
                     : ("Database, db.t4g.micro", MicroDatabase)
             );
-        costs.Add(
-            (
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"{tasks} Fargate task(s), 0.5 vCPU and 1 GB each"
-                ),
-                tasks * Task
-            )
-        );
+        foreach (var (service, entry) in file.Services)
+        {
+            var size = FargateSize.For(entry.Memory, entry.Cpus);
+            var copies = file.Count(env, service);
+            costs.Add(
+                (
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{service}: {copies} Fargate task(s), {size.Describe()} each"
+                    ),
+                    copies * size.Monthly
+                )
+            );
+        }
         if (
             string.Equals(env.Profile, DeployEnvironment.Try, StringComparison.Ordinal)
             && env.Network is null

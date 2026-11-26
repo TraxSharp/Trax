@@ -65,6 +65,9 @@ public partial class PublicApiSurfaceTests
             "Trax.Api.Auth.Oidc"
         );
         yield return new TestCaseData(
+            typeof(Trax.Api.Auth.Tailscale.TailscaleDefaults).Assembly
+        ).SetName("Trax.Api.Auth.Tailscale");
+        yield return new TestCaseData(
             typeof(Trax.Api.GraphQL.Client.Trax.AssemblySchemaProvider).Assembly
         ).SetName("Trax.Api.GraphQL.Client.Trax");
         yield return new TestCaseData(

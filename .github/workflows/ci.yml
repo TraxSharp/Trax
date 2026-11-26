@@ -1255,9 +1255,258 @@ jobs:
               --testee node ts/tools/conformance/testee-ts.mjs
           done
 
+  # trax deploy against a real cluster: k3s on the runner with a local registry, then the podman runtime under
+  # systemd --user, with the DistributedWorkers sample as the app: a hub, workers, Postgres and RabbitMQ
+  # (.github/ci/deploy/README.md says what each proves).
+  # Not kind: its nodes are containers and cannot run pods with hostUsers: false, which every Trax pod has.
+  # On a pull request it runs when the deploy code, the drain it proves or the fixture changes
+  # (its paths in packages.json); a release or a dispatch always runs it.
+  deploy-cluster:
+    needs: changes
+    if: contains(fromJSON(needs.changes.outputs.suite-names), 'deploy-cluster')
+    name: deploy-cluster
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - name: Harden runner
+        # The suite job's .NET list; the k3s installer and binary from GitHub; the registries the images come
+        # from: Docker Hub for k3s's own images, Postgres, RabbitMQ and the local registry, MCR for the ASP.NET base image;
+        # Alpine's packages for the egress image, and api.github.com, the domain the held hub is let reach.
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a  # v2.22.4
+        with:
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            raw.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            objects.githubusercontent.com:443
+            aka.ms:443
+            builds.dotnet.microsoft.com:443
+            ci.dot.net:443
+            dot.net:443
+            api.nuget.org:443
+            crl3.digicert.com:80
+            crl4.digicert.com:80
+            www.microsoft.com:80
+            registry-1.docker.io:443
+            auth.docker.io:443
+            production.cloudflare.docker.com:443
+            production.cloudfront.docker.com:443
+            docker-images-prod.s3.dualstack.us-east-1.amazonaws.com:443
+            docker-images-prod.6aa30f8b08e16409b46e0173d6de2f56.r2.cloudflarestorage.com:443
+            mcr.microsoft.com:443
+            *.data.mcr.microsoft.com:443
+            dl-cdn.alpinelinux.org:443
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
+        with:
+          global-json-file: global.json
+      - name: Deploy to k3s
+        env:
+          K8S: k3s
+        run: .github/ci/deploy/cluster.sh
+      - name: Deploy with the podman runtime
+        # The runner's user has a systemd user manager; lingering keeps it up between steps.
+        run: |
+          set -euo pipefail
+          sudo loginctl enable-linger "$USER"
+          .github/ci/deploy/podman.sh
+      - name: Deploy with compose
+        run: .github/ci/deploy/compose.sh
+
+  # The egress image, Trax.Egress (packages.json suite egress): the Go program, its Dockerfile, the
+  # seccomp profile and the end-to-end test that runs the image in real network namespaces. The Go
+  # code has no dependencies and builds inside the golang image the Dockerfile pins, so the toolchain
+  # here is the one a release builds with. test/e2e.sh runs pods under the runner's rootless podman
+  # and probes them: the allowed domain (api.github.com, allowed below) must open, and everything
+  # else (other names, direct addresses, metadata, private ranges, DNS to an outside resolver) must
+  # not. Its positive controls fail the job if a probe could not have worked; one.one.one.one is
+  # allowed below so the outside resolver is reachable without the egress, which the e2e checks.
+  egress:
+    needs: changes
+    if: contains(fromJSON(needs.changes.outputs.suite-names), 'egress')
+    name: egress
+    # ubuntu-latest, as the release's build job: on 24.04 a rootless podman 4.9 build cannot resolve names behind
+    # harden-runner, so the image's apk step fails. 26.04 ships qemu as qemu-user-binfmt.
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: Trax.Egress
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a  # v2.22.4
+        with:
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            release-assets.githubusercontent.com:443
+            objects.githubusercontent.com:443
+            registry-1.docker.io:443
+            auth.docker.io:443
+            production.cloudflare.docker.com:443
+            production.cloudfront.docker.com:443
+            docker-images-prod.s3.dualstack.us-east-1.amazonaws.com:443
+            docker-images-prod.6aa30f8b08e16409b46e0173d6de2f56.r2.cloudflarestorage.com:443
+            dl-cdn.alpinelinux.org:443
+            azure.archive.ubuntu.com:80
+            azure.archive.ubuntu.com:443
+            *.ec2.archive.ubuntu.com:80
+            *.ec2.archive.ubuntu.com:443
+            archive.ubuntu.com:80
+            archive.ubuntu.com:443
+            security.ubuntu.com:80
+            security.ubuntu.com:443
+            esm.ubuntu.com:80
+            esm.ubuntu.com:443
+            packages.microsoft.com:443
+            one.one.one.one:53
+            one.one.one.one:443
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Format, vet and test
+        # In the golang image the Dockerfile builds with, with no network: the module has no
+        # dependencies to fetch.
+        run: |
+          set -eu
+          go_image=$(sed -n 's/^FROM \(docker.io\/library\/golang[^ ]*\) AS build$/\1/p' Dockerfile)
+          podman run --rm --network none -v "$PWD:/src:ro" -w /src \
+            -e GOFLAGS=-mod=mod -e GOTOOLCHAIN=local -e GOPROXY=off -e GOCACHE=/tmp/gocache \
+            "$go_image" sh -c 'test -z "$(gofmt -l .)" || { gofmt -l .; echo "gofmt would change these"; exit 1; }; go vet ./... && go test ./...'
+      - name: The seccomp profile is the one its generator writes
+        run: python3 -I seccomp/generate.py seccomp/containers-default.json | diff -u seccomp/apps-nouserns.json -
+      - name: Shellcheck
+        run: shellcheck test/e2e.sh
+      - name: Build the image
+        run: podman build --build-arg VERSION=ci -t localhost/trax-egress:ci .
+      - name: Run the image in real network namespaces
+        # one.one.one.one is allowed above so the e2e's outside probes can fail: the e2e first reaches it from a
+        # container with no egress, then must find it blocked from behind the egress. harden-runner allows the
+        # address it resolved, one of 1.1.1.1 and 1.0.0.1, so the e2e is given that one.
+        run: |
+          outside=$(getent ahostsv4 one.one.one.one | awk 'NR == 1 { print $1 }')
+          echo "one.one.one.one resolved to $outside"
+          # harden-runner answers UDP DNS itself, so only the TCP half of the outside DNS probe is controlled here.
+          E2E_OUTSIDE=$outside E2E_UDP_CONTROL=0 test/e2e.sh localhost/trax-egress:ci api.github.com
+      - name: Install qemu for the arm64 build
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends qemu-user-binfmt
+      - name: Build the image for arm64, and run it
+        # A release builds linux/amd64 and linux/arm64 into one index. The arm64 half is built here
+        # under qemu, the way the release builds it, so a break shows on the pull request and not
+        # after a tag is cut.
+        run: |
+          set -eu
+          podman build --platform linux/arm64 --build-arg VERSION=ci -t localhost/trax-egress:ci-arm64 .
+          [ "$(podman image inspect --format '{{.Architecture}}' localhost/trax-egress:ci-arm64)" = arm64 ]
+          [ "$(podman run --rm --platform linux/arm64 localhost/trax-egress:ci-arm64 version)" = ci ]
+
+  # The podman escape suite (Trax.Scheduler's PodmanEscapeTests) against the runner's rootless podman.
+  # The runners have no nested virtualisation for Kata or gVisor, so the sandboxes run under crun with
+  # TRAX_SANDBOX_ASSUME_ISOLATED: that proves the launcher's mechanics (no network, the locked-down
+  # spec, the caps, the output checks, nothing left behind), not the isolation, and the canary tests
+  # still prove crun itself is refused. TRAX_SANDBOX_ESCAPE_REQUIRED turns the suite's skip into a
+  # failure, so a missing socket or image cannot pass as green, and TreatNoTestsAsError does the same for a
+  # filter that no longer matches a test.
+  sandbox-escape:
+    needs: changes
+    if: contains(fromJSON(needs.changes.outputs.folders), 'Trax.Scheduler')
+    name: sandbox-escape
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Harden runner
+        # The .NET install and NuGet, and MCR for the ASP.NET image the escape image and the holder use.
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a  # v2.22.4
+        with:
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            release-assets.githubusercontent.com:443
+            objects.githubusercontent.com:443
+            aka.ms:443
+            builds.dotnet.microsoft.com:443
+            ci.dot.net:443
+            dot.net:443
+            api.nuget.org:443
+            crl3.digicert.com:80
+            crl4.digicert.com:80
+            www.microsoft.com:80
+            mcr.microsoft.com:443
+            *.data.mcr.microsoft.com:443
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
+        with:
+          global-json-file: global.json
+      - name: Start the podman API
+        # Under crun by name: podman before 6 (the runner's is 4.9) ignores a container's own
+        # runtime and uses the service's, and the launcher refuses a sandbox podman created under
+        # any runtime but the one it asked for.
+        run: |
+          set -euo pipefail
+          sock=$RUNNER_TEMP/podman.sock
+          nohup podman --runtime crun system service --time=0 "unix://$sock" >"$RUNNER_TEMP/podman-service.log" 2>&1 &
+          for _ in $(seq 30); do [ -S "$sock" ] && break; sleep 1; done
+          [ -S "$sock" ] || { cat "$RUNNER_TEMP/podman-service.log"; exit 1; }
+          echo "TRAX_SANDBOX_PODMAN_SOCKET=$sock" >>"$GITHUB_ENV"
+      - name: Restore
+        # From the committed lockfiles, as every other job restores, so a drifted one stops here.
+        run: |
+          set -euo pipefail
+          dotnet restore Trax.Scheduler/tests/Trax.Scheduler.Sandbox.Image --locked-mode
+          dotnet restore Trax.Scheduler/tests/Trax.Scheduler.Sandbox.Tests --locked-mode
+      - name: Build the escape image
+        # What build-escape-image.sh does, with the runner's SDK in place of trax-test's image.
+        run: |
+          set -euo pipefail
+          work=$RUNNER_TEMP/escape
+          dotnet publish Trax.Scheduler/tests/Trax.Scheduler.Sandbox.Image -c Release -o "$work/app" -nologo \
+            --no-restore -warnaserror
+          cp Trax.Scheduler/tests/Trax.Scheduler.Sandbox.Image/Containerfile "$work/Containerfile"
+          podman build -q -t localhost/trax-sandbox-escape:test "$work" >/dev/null
+          digest() { podman image inspect --format '{{.Digest}}' "$1"; }
+          {
+            echo "TRAX_SANDBOX_IMAGE=localhost/trax-sandbox-escape@$(digest localhost/trax-sandbox-escape:test)"
+            echo "TRAX_SANDBOX_HOLDER_IMAGE=mcr.microsoft.com/dotnet/aspnet@$(digest mcr.microsoft.com/dotnet/aspnet:10.0)"
+          } >>"$GITHUB_ENV"
+      - name: Run the escape suite under crun
+        env:
+          TRAX_SANDBOX_OCI_RUNTIME: crun
+          TRAX_SANDBOX_ASSUME_ISOLATED: '1'
+          TRAX_SANDBOX_ESCAPE_REQUIRED: '1'
+        run: >
+          dotnet test Trax.Scheduler/tests/Trax.Scheduler.Sandbox.Tests -c Release --no-restore -warnaserror
+          --filter "FullyQualifiedName~Trax.Scheduler.Sandbox.Tests.EscapeTests.PodmanEscapeTests"
+          -- RunConfiguration.TreatNoTestsAsError=true
+
   # The release tooling at the root: semantic-release's config and the plugin in .github/release
-  # that adds pull requests' release notes. Its tests take seconds and read no folder, so they
-  # run on every pull request rather than through the change detection.
+  # that adds pull requests' release notes, and the tests of the change detection in .github/scripts
+  # and of the deploy proof's scripts in .github/ci/deploy, all with their tools faked. They take
+  # seconds and read no folder, so they run on every pull request rather than through the change
+  # detection.
   release-tooling:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -1294,7 +1543,7 @@ jobs:
   # The coverage upload is not among them: it is information, and it never fails a run.
   result:
     name: CI result
-    needs: [changes, dotnet, suite, adr-guard, website, api-dashboard, recovery-client, statemachine-client, checkin-web, board-client, state-machine, state-machine-rust, release-tooling]
+    needs: [changes, dotnet, suite, adr-guard, website, api-dashboard, recovery-client, statemachine-client, checkin-web, board-client, state-machine, state-machine-rust, deploy-cluster, egress, sandbox-escape, release-tooling]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 2

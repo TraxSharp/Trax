@@ -20,6 +20,7 @@ const workflow = yaml.load(workflowText);
 const release = workflow.jobs.release;
 const build = workflow.jobs.build;
 const publish = workflow.jobs.publish;
+const pushEgress = workflow.jobs['push-egress'];
 
 const step = (job, name) => {
   const found = job.steps.find((s) => s.name === name);
@@ -27,6 +28,8 @@ const step = (job, name) => {
   return found;
 };
 const indexOf = (job, name) => job.steps.findIndex((s) => s.name === name);
+// The hosts a job's harden-runner step lets it reach.
+const allowedEndpoints = (job) => step(job, 'Harden runner').with['allowed-endpoints'].split(/\s+/).filter(Boolean);
 
 // sha256sum's output for every file in `folder`, base64-encoded, as the release job records it.
 const digestsOf = (folder) =>
@@ -110,12 +113,213 @@ describe('build job', () => {
     assert.equal(new Set(list).size, list.length);
   });
 
+  it('may reach every Docker Hub host the egress image\'s base images come from, as CI may', () => {
+    // Docker Hub redirects a layer to whichever of its blob hosts it likes; deploy-cluster in
+    // ci.yml lists the ones it has been seen to use. The release build and CI's egress job pull
+    // the same base images.
+    const ci = yaml.load(readFileSync(join(dirname(workflowPath), 'ci.yml'), 'utf8'));
+    const dockerHub = allowedEndpoints(ci.jobs['deploy-cluster']).filter((h) => /docker/.test(h));
+    assert.ok(dockerHub.length >= 6, dockerHub.join(' '));
+    for (const job of [build, ci.jobs.egress])
+      for (const host of dockerHub) assert.ok(allowedEndpoints(job).includes(host), `${host} is not allowed`);
+  });
+
+  describe('the egress image', () => {
+    const buildStep = step(build, 'Build the egress image');
+    const index = (platforms) =>
+      JSON.stringify({
+        schemaVersion: 2,
+        mediaType: 'application/vnd.oci.image.index.v1+json',
+        manifests: platforms.map((p) => {
+          const [os, architecture] = p.split('/');
+          return { mediaType: 'application/vnd.oci.image.manifest.v1+json', digest: `sha256:${'c'.repeat(64)}`, size: 1, platform: { os, architecture } };
+        }),
+      });
+
+    // A fake podman that logs its calls and writes the archive, and a fake skopeo that reads
+    // `raw` back as the archive's top-level manifest.
+    const run = (raw) => {
+      const root = mkdtempSync(join(tmpdir(), 'trax-egress-build-'));
+      const bin = join(root, 'bin');
+      mkdirSync(bin);
+      mkdirSync(join(root, 'tmp'));
+      writeFileSync(join(root, 'raw'), raw);
+      writeFileSync(
+        join(bin, 'podman'),
+        `#!/bin/sh
+echo "podman $*" >> '${join(root, 'calls')}'
+for a in "$@"; do case "$a" in oci-archive:*) printf archive > "\${a#oci-archive:}" ;; esac; done
+`,
+      );
+      writeFileSync(join(bin, 'skopeo'), `#!/bin/sh\necho "skopeo $*" >> '${join(root, 'calls')}'\ncat '${join(root, 'raw')}'\n`);
+      writeFileSync(join(bin, 'sudo'), `#!/bin/sh\necho "sudo $*" >> '${join(root, 'calls')}'\n`);
+      for (const f of ['podman', 'skopeo', 'sudo']) chmodSync(join(bin, f), 0o755);
+      const result = runStep(buildStep.run, root, {
+        PATH: `${bin}:${process.env.PATH}`,
+        PKG_VERSION: '1.63.0',
+        RUNNER_TEMP: join(root, 'tmp'),
+        GITHUB_OUTPUT: join(root, 'output'),
+      });
+      let output = '';
+      try {
+        output = readFileSync(join(root, 'output'), 'utf8');
+      } catch {
+        // The step failed before writing it.
+      }
+      return { result, output, calls: readFileSync(join(root, 'calls'), 'utf8') };
+    };
+
+    it('builds amd64 and arm64 into one index, and hands on the index digest', () => {
+      const raw = index(['linux/amd64', 'linux/arm64']);
+      const { result, output, calls } = run(raw);
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.match(calls, /podman build .*--platform linux\/amd64,linux\/arm64 .*--manifest /);
+      assert.match(calls, /podman manifest push --all --format oci .* oci-archive:egress\/trax-egress\.tar/);
+      assert.match(output, new RegExp(`^digest=sha256:${createHash('sha256').update(raw).digest('hex')}$`, 'm'));
+      assert.match(output, new RegExp(`^archive=${createHash('sha256').update('archive').digest('hex')}$`, 'm'));
+    });
+
+    it('refuses an index without arm64', () => {
+      const { result } = run(index(['linux/amd64']));
+      assert.notEqual(result.status, 0);
+      assert.match(result.stdout, /not linux\/amd64 and linux\/arm64/);
+    });
+
+    it('refuses a single image where an index belongs', () => {
+      const { result } = run(JSON.stringify({ schemaVersion: 2, mediaType: 'application/vnd.oci.image.manifest.v1+json' }));
+      assert.notEqual(result.status, 0);
+    });
+
+    it('builds and runs on arm64 in CI too, so an arm64 break shows before a tag is cut', () => {
+      const egress = yaml.load(readFileSync(join(dirname(workflowPath), 'ci.yml'), 'utf8')).jobs.egress;
+      assert.ok(allowedEndpoints(egress).includes('azure.archive.ubuntu.com:80'));
+      assert.match(step(egress, 'Install qemu for the arm64 build').run, /apt-get install .*qemu-user-binfmt/);
+      assert.match(step(egress, 'Build the image for arm64, and run it').run, /--platform linux\/arm64/);
+    });
+
+    it('builds the egress image on the same runner image as CI, where podman resolves names behind harden-runner', () => {
+      const egress = yaml.load(readFileSync(join(dirname(workflowPath), 'ci.yml'), 'utf8')).jobs.egress;
+      assert.equal(build['runs-on'], 'ubuntu-latest');
+      assert.equal(egress['runs-on'], build['runs-on']);
+    });
+
+    it('may reach the Ubuntu archive, for the qemu the arm64 build runs under', () => {
+      assert.ok(allowedEndpoints(build).includes('azure.archive.ubuntu.com:80'));
+      // A runner on AWS reaches its region's EC2 mirror, falling back to archive.ubuntu.com.
+      for (const job of [build, yaml.load(readFileSync(join(dirname(workflowPath), 'ci.yml'), 'utf8')).jobs.egress])
+        for (const host of ['*.ec2.archive.ubuntu.com:80', 'archive.ubuntu.com:80', 'security.ubuntu.com:80'])
+          assert.ok(allowedEndpoints(job).includes(host), host);
+      assert.match(step(build, 'Install qemu for the arm64 build').run, /apt-get install .*qemu-user-binfmt/);
+      assert.ok(indexOf(build, 'Install qemu for the arm64 build') < indexOf(build, 'Build the egress image'));
+    });
+  });
+
   it('hands publish the packages and their digests', () => {
     assert.equal(build.outputs.digests, '${{ steps.digests.outputs.digests }}');
     assert.equal(build.outputs['npm-digests'], '${{ steps.npm-digests.outputs.digests }}');
     assert.match(step(build, 'Record npm package digest').run, /sha256sum -- \*\.tgz/);
     assert.equal(step(build, 'Upload npm package artifact').with.name, 'npm');
     assert.equal(step(build, 'Upload package artifact').with.name, 'nupkg');
+  });
+});
+
+describe('push-egress job', () => {
+  it('is the only job that may write packages, and it holds nothing else', () => {
+    assert.deepEqual(pushEgress.permissions, { packages: 'write' });
+    for (const [name, job] of Object.entries(workflow.jobs))
+      if (name !== 'push-egress') assert.equal(job.permissions?.packages, undefined, `${name} may write packages`);
+  });
+
+  it('runs after the build, behind the release environment, and before publish', () => {
+    assert.deepEqual(pushEgress.needs, ['release', 'build']);
+    assert.equal(pushEgress.if, "needs.release.outputs.released == 'true'");
+    assert.equal(pushEgress.environment, 'release');
+    assert.ok(publish.needs.includes('push-egress'));
+  });
+
+  it('pushes only the archive the build job built', () => {
+    const verify = step(pushEgress, 'Verify the egress image is the one build built');
+    assert.equal(verify.env.EGRESS_ARCHIVE, '${{ needs.build.outputs.egress-archive }}');
+    assert.ok(indexOf(pushEgress, 'Verify the egress image is the one build built') < indexOf(pushEgress, 'Push the egress image'));
+  });
+});
+
+describe('the egress push', () => {
+  const pushStep = step(pushEgress, 'Push the egress image');
+  const raw = '{"mediaType":"application/vnd.oci.image.index.v1+json"}';
+  const digest = `sha256:${createHash('sha256').update(raw).digest('hex')}`;
+
+  // A fake skopeo: the archive's top-level manifest is `raw`; the registry answers an inspect with
+  // `held` when the caller is logged in, or when the package is public. It logs every call.
+  const run = ({ isPublic, held = raw }) => {
+    const root = mkdtempSync(join(tmpdir(), 'trax-egress-push-'));
+    const bin = join(root, 'bin');
+    mkdirSync(bin);
+    mkdirSync(join(root, 'tmp'));
+    writeFileSync(join(root, 'raw'), raw);
+    writeFileSync(join(root, 'held'), held);
+    writeFileSync(
+      join(bin, 'skopeo'),
+      `#!/bin/sh
+echo "$*" >> '${join(root, 'calls')}'
+case "$1" in
+  login) cat > /dev/null; touch '${join(root, 'session')}' ;;
+  logout) rm -f '${join(root, 'session')}' ;;
+  copy) ;;
+  inspect)
+    for a in "$@"; do last="$a"; done
+    case "$last" in
+      oci-archive:*) cat '${join(root, 'raw')}' ;;
+      docker://*)
+        anonymous=; for a in "$@"; do [ "$a" = --no-creds ] && anonymous=1; done
+        if [ ${isPublic ? 1 : 0} = 1 ] || { [ -z "$anonymous" ] && [ -e '${join(root, 'session')}' ]; }; then
+          cat '${join(root, 'held')}'
+        else
+          echo 'unauthorized' >&2; exit 1
+        fi ;;
+    esac ;;
+esac
+`,
+    );
+    chmodSync(join(bin, 'skopeo'), 0o755);
+    const result = runStep(pushStep.run, root, {
+      PATH: `${bin}:${process.env.PATH}`,
+      PKG_VERSION: '1.63.0',
+      EGRESS_DIGEST: digest,
+      GHCR_USER: 'bot',
+      GHCR_TOKEN: 'token',
+      RUNNER_TEMP: join(root, 'tmp'),
+    });
+    return { result, calls: readFileSync(join(root, 'calls'), 'utf8').trim().split('\n') };
+  };
+
+  it('passes when anyone can pull the pushed digest', () => {
+    const { result } = run({ isPublic: true });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+  });
+
+  it('fails, before NuGet, when the package cannot be pulled without credentials', () => {
+    const { result } = run({ isPublic: false });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stdout, /cannot be pulled without credentials/);
+  });
+
+  it('reads the digest back only after logging out', () => {
+    const { calls } = run({ isPublic: true });
+    const logout = calls.findIndex((c) => c.startsWith('logout'));
+    const readBack = calls.findIndex((c) => c.startsWith('inspect') && c.includes('docker://'));
+    assert.ok(logout >= 0 && logout < readBack, calls.join('\n'));
+  });
+
+  it('fails when the registry holds another digest', () => {
+    const { result } = run({ isPublic: true, held: '{"other":true}' });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stdout, new RegExp(`not ${digest}`));
+  });
+
+  it('pushes every platform in the index, keeping its digest', () => {
+    const { calls } = run({ isPublic: true });
+    assert.ok(calls.some((c) => /^copy --all --preserve-digests oci-archive:/.test(c)), calls.join('\n'));
   });
 });
 
@@ -151,7 +355,7 @@ describe('publish job', () => {
 
   it('takes its digests from the build job', () => {
     const verify = step(publish, 'Verify the packages are the ones build built');
-    assert.deepEqual(publish.needs, ['release', 'build']);
+    assert.deepEqual(publish.needs, ['release', 'build', 'push-egress']);
     assert.equal(verify.env.DIGESTS, '${{ needs.build.outputs.digests }}');
     assert.equal(verify.env.NPM_DIGESTS, '${{ needs.build.outputs.npm-digests }}');
   });
@@ -164,6 +368,15 @@ describe('publish job', () => {
     assert.ok(indexOf(publish, 'Download npm package artifact') < verify);
     assert.ok(verify < attest && attest < npmPublish);
     assert.match(publish.steps[attest].with['subject-path'], /^npm\/\*\.tgz$/m);
+  });
+
+  it('attests the egress image by the digest users pull, not the archive it came in', () => {
+    const attest = step(publish, 'Attest the egress image (SLSA)');
+    assert.equal(attest.uses, step(publish, 'Attest build provenance (SLSA)').uses);
+    assert.equal(attest.with['subject-name'], 'ghcr.io/traxsharp/trax-egress');
+    assert.equal(attest.with['subject-digest'], '${{ needs.build.outputs.egress-digest }}');
+    assert.doesNotMatch(step(publish, 'Attest build provenance (SLSA)').with['subject-path'], /egress/);
+    assert.ok(indexOf(publish, 'Attest the egress image (SLSA)') < indexOf(publish, 'Push to NuGet'));
   });
 
   it('publishes to npm before NuGet, so no NuGet package ships unless npm holds our engine', () => {

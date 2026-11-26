@@ -54,6 +54,7 @@ public partial class PackagesPageTests
         "Trax.Runner.Lambda",
         "Trax.Scheduler",
         "Trax.Scheduler.Lambda",
+        "Trax.Scheduler.Sandbox.Launcher",
         "Trax.Scheduler.Sqs",
         // Trax.Api
         "Trax.Api",
@@ -64,6 +65,7 @@ public partial class PackagesPageTests
         "Trax.Api.Auth.Jwt.Cognito.Issuer",
         "Trax.Api.Auth.Jwt.Testing",
         "Trax.Api.Auth.Oidc",
+        "Trax.Api.Auth.Tailscale",
         "Trax.Api.Console.Terminal",
         "Trax.Api.Dashboard",
         "Trax.Api.GraphQL",

@@ -64,6 +64,9 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
             cancellationToken: ct
         );
 
+    public Task<V1Deployment?> ReadDeploymentAsync(string ns, string name, CancellationToken ct) =>
+        OrNull(() => _client.AppsV1.ReadNamespacedDeploymentAsync(name, ns, cancellationToken: ct));
+
     public async Task<IReadOnlyCollection<string>?> SecretKeysAsync(
         string ns,
         string name,
@@ -85,21 +88,41 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
         ];
     }
 
+    public async Task<IReadOnlyDictionary<string, string>?> SecretLabelsAsync(
+        string ns,
+        string name,
+        CancellationToken ct
+    )
+    {
+        var secret = await OrNull(() =>
+                _client.CoreV1.ReadNamespacedSecretAsync(name, ns, cancellationToken: ct)
+            )
+            .ConfigureAwait(false);
+        if (secret is null)
+            return null;
+        // Only the labels leave this method; the values are dropped here.
+        return new Dictionary<string, string>(
+            secret.Metadata.Labels ?? new Dictionary<string, string>(StringComparer.Ordinal),
+            StringComparer.Ordinal
+        );
+    }
+
+    public async Task<string?> ProxySecretAsync(string ns, string name, CancellationToken ct)
+    {
+        var secret = await OrNull(() =>
+                _client.CoreV1.ReadNamespacedSecretAsync(name, ns, cancellationToken: ct)
+            )
+            .ConfigureAwait(false);
+        return secret?.Data?.TryGetValue(KubernetesTailnet.ProxySecretKey, out var value) is true
+            ? System.Text.Encoding.UTF8.GetString(value)
+            : null;
+    }
+
     public async Task<IReadOnlyList<KubernetesObjectState>> ListAsync(
         string ns,
         CancellationToken ct
     )
     {
-        static KubernetesObjectState State(string kind, V1ObjectMeta meta) =>
-            new(
-                kind,
-                meta.Name,
-                meta.Labels is { } labels
-                && labels.TryGetValue(KubernetesTarget.AppLabel, out var app)
-                    ? app
-                    : null
-            );
-
         var all = new List<KubernetesObjectState>();
         all.AddRange(
             (
@@ -137,12 +160,50 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
             ).Items.Select(o => State("ServiceAccount", o.Metadata))
         );
         all.AddRange(await SecurityGroupPoliciesAsync(ns, ct).ConfigureAwait(false));
+        all.AddRange(await AroundAsync(ns, ct).ConfigureAwait(false));
         all.AddRange(
             (
                 await _client
                     .CoreV1.ListNamespacedPersistentVolumeClaimAsync(ns, cancellationToken: ct)
                     .ConfigureAwait(false)
             ).Items.Select(o => State("PersistentVolumeClaim", o.Metadata))
+        );
+        return all;
+    }
+
+    private static KubernetesObjectState State(string kind, V1ObjectMeta meta) =>
+        new(
+            kind,
+            meta.Name,
+            meta.Labels is { } labels && labels.TryGetValue(KubernetesTarget.AppLabel, out var app)
+                ? app
+                : null
+        );
+
+    /// <summary>The namespace's NetworkPolicies, Ingresses and ConfigMaps.</summary>
+    private async Task<List<KubernetesObjectState>> AroundAsync(string ns, CancellationToken ct)
+    {
+        var all = new List<KubernetesObjectState>();
+        all.AddRange(
+            (
+                await _client
+                    .NetworkingV1.ListNamespacedNetworkPolicyAsync(ns, cancellationToken: ct)
+                    .ConfigureAwait(false)
+            ).Items.Select(o => State("NetworkPolicy", o.Metadata))
+        );
+        all.AddRange(
+            (
+                await _client
+                    .NetworkingV1.ListNamespacedIngressAsync(ns, cancellationToken: ct)
+                    .ConfigureAwait(false)
+            ).Items.Select(o => State("Ingress", o.Metadata))
+        );
+        all.AddRange(
+            (
+                await _client
+                    .CoreV1.ListNamespacedConfigMapAsync(ns, cancellationToken: ct)
+                    .ConfigureAwait(false)
+            ).Items.Select(o => State("ConfigMap", o.Metadata))
         );
         return all;
     }
@@ -195,6 +256,45 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
         return found;
     }
 
+    public async Task<KubernetesObjectState?> ClusterObjectAsync(
+        string kind,
+        string name,
+        CancellationToken ct
+    )
+    {
+        var meta = kind switch
+        {
+            "ValidatingAdmissionPolicy" => (
+                await OrNull(() =>
+                        _client.AdmissionregistrationV1.ReadValidatingAdmissionPolicyAsync(
+                            name,
+                            cancellationToken: ct
+                        )
+                    )
+                    .ConfigureAwait(false)
+            )?.Metadata,
+            "ValidatingAdmissionPolicyBinding" => (
+                await OrNull(() =>
+                        _client.AdmissionregistrationV1.ReadValidatingAdmissionPolicyBindingAsync(
+                            name,
+                            cancellationToken: ct
+                        )
+                    )
+                    .ConfigureAwait(false)
+            )?.Metadata,
+            _ => throw new InvalidOperationException($"trax does not read a cluster-wide {kind}."),
+        };
+        if (meta is null)
+            return null;
+        return new KubernetesObjectState(
+            kind,
+            name,
+            meta.Labels is { } labels && labels.TryGetValue(KubernetesTarget.AppLabel, out var app)
+                ? app
+                : null
+        );
+    }
+
     public async Task ApplyAsync(IKubernetesObject<V1ObjectMeta> body, CancellationToken ct)
     {
         var patch = new V1Patch(body, V1Patch.PatchType.ApplyPatch);
@@ -244,8 +344,8 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
         }
     }
 
-    /// <summary>A ServiceAccount, or an EKS SecurityGroupPolicy: what a deploy to EKS applies beside the workloads.</summary>
-    private async Task ApplyIdentityAsync(
+    /// <summary>What a deploy applies around the workloads: its network policies, a tailnet exposure's objects.</summary>
+    private async Task<bool> ApplyAroundAsync(
         IKubernetesObject<V1ObjectMeta> body,
         V1Patch patch,
         string name,
@@ -255,12 +355,100 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
     {
         switch (body)
         {
+            case V1NetworkPolicy:
+                await _client
+                    .NetworkingV1.PatchNamespacedNetworkPolicyAsync(
+                        patch,
+                        name,
+                        ns,
+                        fieldManager: FieldManager,
+                        force: true,
+                        cancellationToken: ct
+                    )
+                    .ConfigureAwait(false);
+                return true;
+            case V1Ingress:
+                await _client
+                    .NetworkingV1.PatchNamespacedIngressAsync(
+                        patch,
+                        name,
+                        ns,
+                        fieldManager: FieldManager,
+                        force: true,
+                        cancellationToken: ct
+                    )
+                    .ConfigureAwait(false);
+                return true;
+            case V1ConfigMap:
+                await _client
+                    .CoreV1.PatchNamespacedConfigMapAsync(
+                        patch,
+                        name,
+                        ns,
+                        fieldManager: FieldManager,
+                        force: true,
+                        cancellationToken: ct
+                    )
+                    .ConfigureAwait(false);
+                return true;
+            case V1Secret:
+                await _client
+                    .CoreV1.PatchNamespacedSecretAsync(
+                        patch,
+                        name,
+                        ns,
+                        fieldManager: FieldManager,
+                        force: true,
+                        cancellationToken: ct
+                    )
+                    .ConfigureAwait(false);
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>A ServiceAccount, or an EKS SecurityGroupPolicy: what a deploy to EKS applies beside the workloads.</summary>
+    private async Task ApplyIdentityAsync(
+        IKubernetesObject<V1ObjectMeta> body,
+        V1Patch patch,
+        string name,
+        string ns,
+        CancellationToken ct
+    )
+    {
+        if (await ApplyAroundAsync(body, patch, name, ns, ct).ConfigureAwait(false))
+            return;
+        switch (body)
+        {
             case V1ServiceAccount:
                 await _client
                     .CoreV1.PatchNamespacedServiceAccountAsync(
                         patch,
                         name,
                         ns,
+                        fieldManager: FieldManager,
+                        force: true,
+                        cancellationToken: ct
+                    )
+                    .ConfigureAwait(false);
+                break;
+            case V1ValidatingAdmissionPolicy:
+                await _client
+                    .AdmissionregistrationV1.PatchValidatingAdmissionPolicyAsync(
+                        patch,
+                        name,
+                        fieldManager: FieldManager,
+                        force: true,
+                        cancellationToken: ct
+                    )
+                    .ConfigureAwait(false);
+                break;
+            case V1ValidatingAdmissionPolicyBinding:
+                await _client
+                    .AdmissionregistrationV1.PatchValidatingAdmissionPolicyBindingAsync(
+                        patch,
+                        name,
                         fieldManager: FieldManager,
                         force: true,
                         cancellationToken: ct
@@ -338,8 +526,9 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
     }
 
     /// <summary>
-    /// Why the Job's pod can never start, or null. A Job with no retries does not fail while its pod waits on an
-    /// image it cannot pull, so without this the wait would run to its deadline.
+    /// Why the Job's pod can never start, or null: no node can take it after <see cref="UnschedulableGrace"/>, or it
+    /// waits on an image it cannot pull. A Job with no retries does not fail while its pod waits, so without this the
+    /// wait would run to its deadline.
     /// </summary>
     private async Task<string?> StuckAsync(string ns, string job, CancellationToken ct)
     {
@@ -350,11 +539,47 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
                 cancellationToken: ct
             )
             .ConfigureAwait(false);
+        if (Unschedulable(pods.Items, _clock.GetUtcNow()) is { } unscheduled)
+            return $"{CannotBeScheduled}: {unscheduled}";
         return pods
             .Items.Select(Waiting)
             .Where(w => w?.Reason is { } reason && NeverStarts.Contains(reason))
             .Select(w => $"{w?.Reason}: {w?.Message}".TrimEnd(' ', ':'))
             .FirstOrDefault();
+    }
+
+    /// <summary>
+    /// How long a pod may wait for a node before the wait ends: two minutes, so a cluster autoscaler has time to add
+    /// one. A pod still unscheduled after it is not going to fit, and waiting out the full deadline only hides why.
+    /// </summary>
+    internal static readonly TimeSpan UnschedulableGrace = TimeSpan.FromMinutes(2);
+
+    /// <summary>How a wait that ended on an unschedulable pod says so.</summary>
+    internal const string CannotBeScheduled = "its pod cannot be scheduled";
+
+    /// <summary>
+    /// The scheduler's reason for a pod it has not placed for <see cref="UnschedulableGrace"/> or longer
+    /// (<c>0/1 nodes are available: 1 Insufficient cpu</c>), or null when every pod is placed or still within the
+    /// grace period.
+    /// </summary>
+    internal static string? Unschedulable(IEnumerable<V1Pod> pods, DateTimeOffset now)
+    {
+        foreach (var pod in pods)
+        {
+            var scheduled = pod.Status?.Conditions?.FirstOrDefault(c =>
+                string.Equals(c.Type, "PodScheduled", StringComparison.Ordinal)
+                && string.Equals(c.Status, "False", StringComparison.Ordinal)
+                && string.Equals(c.Reason, "Unschedulable", StringComparison.Ordinal)
+            );
+            if (scheduled?.LastTransitionTime is not { } since)
+                continue;
+            var at = new DateTimeOffset(DateTime.SpecifyKind(since, DateTimeKind.Utc));
+            if (now - at >= UnschedulableGrace)
+                return string.IsNullOrWhiteSpace(scheduled.Message)
+                    ? "no node can take it"
+                    : scheduled.Message.Trim();
+        }
+        return null;
     }
 
     /// <summary>Reads the end of the Job's log, then deletes the Job so its pod stops retrying.</summary>
@@ -376,6 +601,82 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
             )
             .ConfigureAwait(false);
         return new KubernetesJobResult(Succeeded: false, reason, tail);
+    }
+
+    /// <summary>
+    /// Why a pod of the workload can never start, or null: a pod no node can take after
+    /// <see cref="UnschedulableGrace"/>, a container waiting on something that does not fix itself (an image it
+    /// cannot pull, a Secret key it cannot read), or a sandbox the node has failed to create
+    /// <see cref="SandboxAttempts"/> times. The second is what a cluster that cannot give a pod a user namespace of
+    /// its own (<c>hostUsers: false</c>) does with every Trax pod: kind, whose nodes are containers, is one. Without
+    /// this the wait runs to its ten minutes and says only that the rollout did not finish.
+    /// </summary>
+    private async Task<string?> CannotStartAsync(
+        string ns,
+        string selector,
+        CancellationToken ct,
+        Func<V1Pod, bool>? current = null
+    )
+    {
+        var listed = await _client
+            .CoreV1.ListNamespacedPodAsync(ns, labelSelector: selector, cancellationToken: ct)
+            .ConfigureAwait(false);
+        var pods = new V1PodList
+        {
+            Items = listed.Items.Where(p => current?.Invoke(p) ?? true).ToList(),
+        };
+        if (Unschedulable(pods.Items, _clock.GetUtcNow()) is { } unscheduled)
+            return $"{CannotBeScheduled}: {unscheduled}";
+        var waiting = pods
+            .Items.Select(Waiting)
+            .Where(w => w?.Reason is { } reason && NeverStarts.Contains(reason))
+            .Select(w => $"{w?.Reason}: {w?.Message}".TrimEnd(' ', ':'))
+            .FirstOrDefault();
+        if (waiting is not null)
+            return waiting;
+        foreach (var pod in pods.Items)
+        {
+            var events = await _client
+                .CoreV1.ListNamespacedEventAsync(
+                    ns,
+                    fieldSelector: $"involvedObject.name={pod.Metadata.Name},reason={SandboxFailed}",
+                    cancellationToken: ct
+                )
+                .ConfigureAwait(false);
+            if (SandboxFailure(events.Items) is { } failure)
+                return failure;
+        }
+        return null;
+    }
+
+    /// <summary>The event reason a kubelet reports when it cannot create a pod's sandbox.</summary>
+    internal const string SandboxFailed = "FailedCreatePodSandBox";
+
+    /// <summary>How many failed sandbox attempts mean the node will never create it, not that it is still trying.</summary>
+    internal const int SandboxAttempts = 3;
+
+    /// <summary>
+    /// The sentence for a pod whose sandbox the node has failed to create <see cref="SandboxAttempts"/> times or more
+    /// (an event's count, or its series' when the kubelet groups them), or null.
+    /// </summary>
+    internal static string? SandboxFailure(IEnumerable<Corev1Event> events)
+    {
+        var failed = events
+            .Where(e => string.Equals(e.Reason, SandboxFailed, StringComparison.Ordinal))
+            .ToList();
+        var attempts = failed.Sum(e => Math.Max(e.Count ?? 1, e.Series?.Count ?? 0));
+        if (attempts < SandboxAttempts)
+            return null;
+        var message = failed[^1].Message ?? "";
+        return
+            message.Contains("sysfs", StringComparison.Ordinal)
+            || message.Contains("user namespace", StringComparison.OrdinalIgnoreCase)
+            ? $"the node cannot give it a user namespace of its own, which every Trax pod asks for with hostUsers: "
+                + $"false. kind cannot (its nodes are containers); k3s, EKS and a kernel of 6.3 or later can. {message}"
+            : string.Create(
+                CultureInfo.InvariantCulture,
+                $"the node failed {attempts} times to create its sandbox: {message}"
+            );
     }
 
     /// <summary>The waiting reasons a container does not recover from without a change to the Job.</summary>
@@ -430,26 +731,28 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
         var deadline = _clock.GetUtcNow() + timeout;
         while (true)
         {
-            var (done, state) = kind switch
-            {
-                "Deployment" => Rolled(
-                    await _client
-                        .AppsV1.ReadNamespacedDeploymentStatusAsync(name, ns, cancellationToken: ct)
-                        .ConfigureAwait(false)
-                ),
-                "StatefulSet" => Rolled(
-                    await _client
-                        .AppsV1.ReadNamespacedStatefulSetStatusAsync(
-                            name,
-                            ns,
-                            cancellationToken: ct
-                        )
-                        .ConfigureAwait(false)
-                ),
-                _ => throw new InvalidOperationException($"trax does not wait on a {kind}."),
-            };
+            var (done, state, current) = await RolloutStateAsync(ns, kind, name, ct)
+                .ConfigureAwait(false);
             if (done)
                 return;
+            if (
+                current is not null
+                && await CannotStartAsync(ns, $"{KubernetesTarget.NameLabel}={name}", ct, current)
+                    .ConfigureAwait(false)
+                    is { } why
+            )
+                throw new InvalidOperationException(
+                    (
+                        why.StartsWith(CannotBeScheduled, StringComparison.Ordinal)
+                            ? $"{kind} {name} did not roll out: {why}. See "
+                            : $"{kind} {name} did not roll out: its pod cannot start ({why}). See "
+                    ) + $"'kubectl describe pods -l {KubernetesTarget.NameLabel}={name} -n {ns}'."
+                );
+            if (state.StartsWith(PastDeadline, StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    $"{kind} {name} did not roll out: {state}. See "
+                        + $"'kubectl describe {kind.ToLowerInvariant()} {name} -n {ns}'."
+                );
             if (_clock.GetUtcNow() > deadline)
                 throw new InvalidOperationException(
                     string.Create(
@@ -461,10 +764,125 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
         }
     }
 
+    /// <summary>
+    /// Where a rollout is, and which of its pods count when asking whether one can never start: none until the
+    /// controller has seen the latest spec, then only the pods of that spec that are not being deleted. A rollback
+    /// reapplies the old spec while the broken pods of the abandoned one are still listed; those are not this
+    /// rollout's.
+    /// </summary>
+    private async Task<(bool Done, string State, Func<V1Pod, bool>? Current)> RolloutStateAsync(
+        string ns,
+        string kind,
+        string name,
+        CancellationToken ct
+    )
+    {
+        switch (kind)
+        {
+            case "Deployment":
+            {
+                var d = await _client
+                    .AppsV1.ReadNamespacedDeploymentStatusAsync(name, ns, cancellationToken: ct)
+                    .ConfigureAwait(false);
+                var (done, state) = Rolled(d);
+                if (done || !(d.Status?.ObservedGeneration >= d.Metadata.Generation))
+                    return (done, state, null);
+                var sets = await _client
+                    .AppsV1.ListNamespacedReplicaSetAsync(
+                        ns,
+                        labelSelector: $"{KubernetesTarget.NameLabel}={name}",
+                        cancellationToken: ct
+                    )
+                    .ConfigureAwait(false);
+                return (false, state, CurrentReplicaSet(sets.Items));
+            }
+            case "StatefulSet":
+            {
+                var set = await _client
+                    .AppsV1.ReadNamespacedStatefulSetStatusAsync(name, ns, cancellationToken: ct)
+                    .ConfigureAwait(false);
+                var (done, state) = Rolled(set);
+                if (done || !(set.Status?.ObservedGeneration >= set.Metadata.Generation))
+                    return (done, state, null);
+                var revision = set.Status?.UpdateRevision;
+                return (
+                    false,
+                    state,
+                    p =>
+                        p.Metadata?.DeletionTimestamp is null
+                        && (
+                            revision is null
+                            || string.Equals(
+                                ValueOf(p.Metadata?.Labels, StatefulSetRevisionLabel),
+                                revision,
+                                StringComparison.Ordinal
+                            )
+                        )
+                );
+            }
+            default:
+                throw new InvalidOperationException($"trax does not wait on a {kind}.");
+        }
+    }
+
+    private static string? ValueOf(IDictionary<string, string>? values, string key) =>
+        values is not null && values.TryGetValue(key, out var value) ? value : null;
+
+    /// <summary>The label a StatefulSet's controller puts on each pod: the revision of the spec it was made from.</summary>
+    private const string StatefulSetRevisionLabel = "controller-revision-hash";
+
+    /// <summary>The annotation a Deployment's controller numbers each of its ReplicaSets with; the highest is current.</summary>
+    private const string RevisionAnnotation = "deployment.kubernetes.io/revision";
+
+    /// <summary>
+    /// Whether a pod belongs to the current ReplicaSet of <paramref name="sets"/> (the highest revision) and is not
+    /// being deleted. With no ReplicaSet listed, every pod not being deleted counts.
+    /// </summary>
+    internal static Func<V1Pod, bool> CurrentReplicaSet(IEnumerable<V1ReplicaSet> sets)
+    {
+        var uid = sets.Select(r =>
+                (
+                    r.Metadata?.Uid,
+                    Revision: long.TryParse(
+                        ValueOf(r.Metadata?.Annotations, RevisionAnnotation),
+                        NumberStyles.None,
+                        CultureInfo.InvariantCulture,
+                        out var n
+                    )
+                        ? n
+                        : -1
+                )
+            )
+            .OrderByDescending(r => r.Revision)
+            .Select(r => r.Uid)
+            .FirstOrDefault();
+        return p =>
+            p.Metadata?.DeletionTimestamp is null
+            && (
+                uid is null
+                || (
+                    p.Metadata?.OwnerReferences?.Any(o =>
+                        string.Equals(o.Uid, uid, StringComparison.Ordinal)
+                    )
+                    ?? false
+                )
+            );
+    }
+
+    /// <summary>How <see cref="Rolled(V1Deployment)"/> starts the state of a Deployment past its progress deadline.</summary>
+    internal const string PastDeadline = "past its progress deadline";
+
     internal static (bool Done, string State) Rolled(V1Deployment d)
     {
         var want = d.Spec.Replicas ?? 1;
         var s = d.Status;
+        var stalled = s?.Conditions?.FirstOrDefault(c =>
+            string.Equals(c.Type, "Progressing", StringComparison.Ordinal)
+            && string.Equals(c.Status, "False", StringComparison.Ordinal)
+            && string.Equals(c.Reason, "ProgressDeadlineExceeded", StringComparison.Ordinal)
+        );
+        if (stalled is not null && s?.ObservedGeneration >= d.Metadata.Generation)
+            return (false, $"{PastDeadline} ({stalled.Message})");
         var done =
             s is not null
             && s.ObservedGeneration >= d.Metadata.Generation
@@ -655,6 +1073,16 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
             await DeleteIdentityAsync(ns, target, ct).ConfigureAwait(false);
             return;
         }
+        if (target.Kind is "NetworkPolicy" or "Ingress" or "ConfigMap" or "Secret")
+        {
+            await DeleteAroundAsync(ns, target, ct).ConfigureAwait(false);
+            return;
+        }
+        if (target.Kind is "ValidatingAdmissionPolicy" or "ValidatingAdmissionPolicyBinding")
+        {
+            await DeleteAdmissionAsync(target, ct).ConfigureAwait(false);
+            return;
+        }
         const string background = "Background";
         await OrNull<object>(async () =>
                 target.Kind switch
@@ -701,6 +1129,25 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
             .ConfigureAwait(false);
     }
 
+    /// <summary>A cluster-wide admission policy or binding, which has no namespace.</summary>
+    private async Task DeleteAdmissionAsync(KubernetesObjectState target, CancellationToken ct) =>
+        await OrNull<object>(async () =>
+                string.Equals(target.Kind, "ValidatingAdmissionPolicy", StringComparison.Ordinal)
+                    ? await _client
+                        .AdmissionregistrationV1.DeleteValidatingAdmissionPolicyAsync(
+                            target.Name,
+                            cancellationToken: ct
+                        )
+                        .ConfigureAwait(false)
+                    : await _client
+                        .AdmissionregistrationV1.DeleteValidatingAdmissionPolicyBindingAsync(
+                            target.Name,
+                            cancellationToken: ct
+                        )
+                        .ConfigureAwait(false)
+            )
+            .ConfigureAwait(false);
+
     /// <summary>
     /// A pod's log, or null when there is none to read: the pod is gone (404), or its container has not started
     /// (400).
@@ -717,6 +1164,46 @@ internal sealed class KubernetesDeployClient : IKubernetesDeployClient
             return null;
         }
     }
+
+    /// <summary>A network policy, or a tailnet exposure's Ingress, ConfigMap or proxy Secret.</summary>
+    private async Task DeleteAroundAsync(
+        string ns,
+        KubernetesObjectState target,
+        CancellationToken ct
+    ) =>
+        await OrNull<object>(async () =>
+                target.Kind switch
+                {
+                    "NetworkPolicy" => await _client
+                        .NetworkingV1.DeleteNamespacedNetworkPolicyAsync(
+                            target.Name,
+                            ns,
+                            cancellationToken: ct
+                        )
+                        .ConfigureAwait(false),
+                    "Ingress" => await _client
+                        .NetworkingV1.DeleteNamespacedIngressAsync(
+                            target.Name,
+                            ns,
+                            cancellationToken: ct
+                        )
+                        .ConfigureAwait(false),
+                    "ConfigMap" => await _client
+                        .CoreV1.DeleteNamespacedConfigMapAsync(
+                            target.Name,
+                            ns,
+                            cancellationToken: ct
+                        )
+                        .ConfigureAwait(false),
+                    "Secret" => await _client
+                        .CoreV1.DeleteNamespacedSecretAsync(target.Name, ns, cancellationToken: ct)
+                        .ConfigureAwait(false),
+                    _ => throw new InvalidOperationException(
+                        $"trax does not delete a {target.Kind}."
+                    ),
+                }
+            )
+            .ConfigureAwait(false);
 
     private async Task DeleteIdentityAsync(
         string ns,

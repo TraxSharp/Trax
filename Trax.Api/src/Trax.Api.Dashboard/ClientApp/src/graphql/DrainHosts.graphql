@@ -1,0 +1,11 @@
+# Stop every host starting new work for a number of minutes.
+mutation DrainHosts($minutes: Int) {
+  operations {
+    config {
+      drain(minutes: $minutes) {
+        success
+        message
+      }
+    }
+  }
+}

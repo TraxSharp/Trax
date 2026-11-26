@@ -51,6 +51,9 @@ no code.
 - [Operations console](/docs/dashboard): finding, reading and requeuing runs.
 - [How retries work](/docs/scheduler/how-retries-work): backoff, dead letters and requeues.
 - [Deployment topologies](/docs/reference/deployment-topologies): one host, or a hub and workers.
+- [A zero-downtime deploy on k3s](/docs/reference/a-zero-downtime-deploy-on-k3s): a private hub on a cluster, a
+  release that drains and keeps serving, and one that rolls back.
+- [Deploy a Trax app](/docs/reference/deploy-a-trax-app): one file, to compose, Kubernetes or AWS.
 - [Troubleshooting](/docs/cross-cutting/troubleshooting): startup and runtime errors, verbatim.
 
 The [Glossary](/docs/reference/glossary) gives every Trax name its plain meaning.
@@ -65,6 +68,8 @@ The [Glossary](/docs/reference/glossary) gives every Trax name its plain meaning
   React storefront, one feature per chapter.
 - [Getting Started](/docs/getting-started): build a server with one train, record its runs in
   Postgres, schedule it, open the operations console and call it over GraphQL.
+- [A zero-downtime deploy on k3s](/docs/reference/a-zero-downtime-deploy-on-k3s): take a new hub to k3s in a virtual
+  machine and release it with no outage.
 
 ### Do
 
@@ -107,6 +112,10 @@ The [Glossary](/docs/reference/glossary) gives every Trax name its plain meaning
   the shape Trax expects.
 - [Deployment topologies](/docs/reference/deployment-topologies): the ways to split an application
   across processes, and the sample that runs each.
+- [How a deploy works](/docs/reference/how-a-deploy-works): what each deploy target can and cannot do, and the
+  order a cluster deploy runs in.
+- [Deployment security](/docs/security/deployment-security): what each layer of a deployment keeps out, and what
+  has been proved on real hosts.
 - [Trax compared](/docs/reference/comparison): with Temporal, Durable Functions, Elsa, MassTransit, XState, Hangfire
   and Quartz.NET, and when each is the better fit.
 - [Versioning and stability](/docs/reference/versioning): what a release may change, and what Trax runs on.

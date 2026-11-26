@@ -111,8 +111,45 @@ caller who is not a customer gets `FORBIDDEN`; an empty payment token gets `GUAR
 checkout to Placed or Failed from its result. Both snippets are trimmed; the full machine is in
 [`CheckoutMachine.cs`](Trax.Samples/book/Shopfront/Shopfront.Core/Machines/Checkout/CheckoutMachine.cs).
 
+## Run it anywhere
+
+One file, `trax.deploy.json`, says where the app runs. `trax deploy` reads it, asks each of your
+processes what it needs (a database, a broker, a health check), and deploys the same app to your
+own machine (podman, or k3s in a VM), to AWS (ECS or EKS) or to any Kubernetes cluster.
+
+```json
+"services": {
+  "hub":    { "project": "Orders/Orders.csproj", "memory": 1024 },
+  "worker": { "project": "Orders.Worker/Orders.Worker.csproj", "count": 2,
+              "memory": 2048, "egress": ["api.stripe.com"] }
+},
+"environments": {
+  "home": { "target": "kubernetes", "profile": "try", "registry": "localhost:5001",
+            "database": { "inCluster": true }, "exposure": "tailnet" }
+}
+```
+
+- **Releases without an outage.** Every process stops starting new work and the deploy waits for
+  what is running; on a cluster or AWS the new version then starts beside the old one.
+- **Rolls back on its own.** On a cluster or AWS, a release that never gets ready goes back to the
+  version before.
+- **Private.** Serve the API only on your tailnet, with sign-in by tailnet identity. Inside a
+  cluster, only the app's own services reach its database.
+- **Only where it needs to go.** Each service names the domains it may reach and nothing else gets
+  out, with memory and CPU per service and a read-only filesystem for all of them.
+- **Untrusted code in a sandbox.** Code a person or an agent wrote runs in a fresh sandbox per run,
+  with no network: a Kata virtual machine on Kubernetes (k3s on one machine will do), gVisor under
+  podman on one host.
+
+CI deploys a real app to a real cluster on every change to this code, measures a release for
+downtime and rolls a broken one back. [Deploy a Trax
+app](https://traxsharp.net/docs/reference/deploy-a-trax-app) is where to start;
+[DistributedWorkers](Trax.Samples/samples/DistributedWorkers) is a sample that deploys this way.
+
 ## Features
 
+- **Run it anywhere.** One file deploys the app to your own machine, AWS or any Kubernetes cluster,
+  privately, and on a cluster or AWS without an outage ([above](#run-it-anywhere)).
 - **State machines the server applies.** States, moves, roles and guards in C#. The client sends
   a move and the server works out the result. A TypeScript twin,
   [`@traxsharp/state-machine`](https://www.npmjs.com/package/@traxsharp/state-machine), runs the

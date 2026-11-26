@@ -668,7 +668,10 @@ C# client does not type one yet; the console selects none.
 database, its roles, its endpoints) is not written in the file: trax runs each project once with
 `--trax-export-deploy`, in Production, and reads what the host reports
 ([DeployManifest](/docs/sdk-reference/configuration/deploy-manifest)). A host that would refuse to start in
-Production refuses the deploy the same way, before anything is written. A run still going after ten minutes, its
+Production refuses the deploy the same way, before anything is written. The export runs with a stand-in for each
+connection string, setting and secret, none of which reaches anything: Postgres and RabbitMQ on `.invalid` hosts,
+RabbitMQ's over `amqps://`, each setting an `https://` URL and each secret the base64 of 37 bytes, so a host that
+checks their shape when it starts gets past the check. A run still going after ten minutes, its
 build included, is stopped and the deploy fails with what it printed: a host that calls `app.Run()` serves instead
 of reporting.
 
@@ -688,6 +691,13 @@ a compose stack for one machine, staging on a Kubernetes cluster and production 
 environment's target decides, and a `--target` given beside it must match it or the deploy is refused naming both.
 Without `--env`, `--target compose` (the default) writes the podman stack below; `--target aws` and
 `--target kubernetes` need an environment.
+
+Every image is built from its project's committed lockfiles: trax runs `dotnet restore --locked-mode` on the
+project, then `dotnet publish --no-restore`, so a deploy never rewrites a `packages.lock.json` and stops on one that
+has drifted. The app is published for no particular runtime, and the aws and kubernetes targets make its image for
+linux-x64 (`-p:ContainerRuntimeIdentifier=linux-x64`), which runs it as `dotnet <app>.dll`. A project needs no
+`RuntimeIdentifiers` for this, and should not list them: with them, restore downloads runtime packs that no
+lockfile pins.
 
 ### `trax.deploy.json`
 
@@ -720,18 +730,106 @@ Without `--env`, `--target compose` (the default) writes the podman stack below;
 | Key | Meaning |
 |---|---|
 | `app` | Lower case, a letter first, then letters, digits or dashes. Names the database, its user and the images. |
-| `services` | Each deployed project, relative to the file, under its service name. `port` is the loopback port compose publishes a hub's HTTP on. `count` is how many copies run; a service whose host runs the `api` or `scheduler` role runs one. `memory` is the memory each copy may use, in MiB, at least 128; 1024 when left out. `init` names a lone project `hub` and several by the last part of their names. |
+| `services` | Each deployed project, relative to the file, under its service name. `port` is the loopback port compose publishes a hub's HTTP on. `count` is how many copies run; a service whose host runs the `api` or `scheduler` role runs one. `memory` is the memory each copy may use, in MiB, at least 128; with none a copy has no memory limit (on aws a Fargate task needs one, so it gets 1024). `cpus` is the CPU each copy may use (`1.5`), from 0.1 to 16; with none, no limit (on aws, half a vCPU). `pids` is how many processes and threads a copy may run, at least 64; 512 when left out. Only compose applies it: Kubernetes and Fargate have no per-container process limit, so an aws or kubernetes environment refuses a file whose services name `pids`. Set `memory` in production: a copy with no limit that leaks can take the memory Postgres and its neighbours need, and on Kubernetes a pod with no request or limit is the first evicted when its node runs short. `init` names a lone project `hub` and several by the last part of their names. |
 | `connectionStrings` | The name under `ConnectionStrings:` the hosts read Postgres from, and the name they read RabbitMQ's settings under. Default `Trax` and `RabbitMq`. |
 | `settings`, `secrets` | Configuration the deployment must supply, as environment names (`__` for `:`). Every one is required. |
 | `environments` | Each environment by name (lower-case letters and digits), with its `target` and that target's keys below. |
+| `egressImage` | The egress image to run beside a service that names `egress`, by digest (`ghcr.io/traxsharp/trax-egress@sha256:...`). Without it, the one this trax was released with. A development build of trax has none, and refuses `egress` until the file names one. |
 
 A version 1 file, from before environments named their target, still reads: each of its environments is `aws`. trax
 writes version 2.
+
+### Egress
+
+A service's `egress` lists the domains it may reach. A service that names it reaches those, the deployment's own
+database and broker, and nothing else:
+
+```json
+"services": {
+  "hub": { "project": "Orders/Orders.csproj", "egress": ["api.anthropic.com", "registry.example.com:8443"] }
+}
+```
+
+Each entry is a domain, reached over TLS on 443, or on the port after it. Lower case, at least two labels, no
+wildcard, scheme, path or address, at most 64 entries, each named once; anything else is refused when the file is
+read. An empty list allows only the deployment's own services. A service without `egress` is left open, as before.
+
+It is held by [the egress image](/docs/reference/egress-image), run beside the service:
+
+| The service tries | What happens |
+|---|---|
+| A listed domain on its port | Connected, to an address that domain resolves to. The name it asks for over TLS is checked, so an address it dialled itself is not what is reached. |
+| An unlisted domain | It does not resolve, and a TLS connection asking for it is reset. |
+| DNS to any resolver, its own included | Answered by the egress resolver, which knows only the listed names. A name made of data never leaves the pod. |
+| Instance metadata, the LAN, the tailnet, a public address with no listed name | Reset. |
+| The deployment's Postgres and RabbitMQ | Connected, by the name the deployment gives them, at what that name resolves to now. |
+| UDP other than DNS, IPv6 | Refused. |
+| Changing the rules | Refused: the service keeps every capability dropped. |
+
+Every target says what it does with it:
+
+| Target | Egress |
+|---|---|
+| compose | A sidecar, `<service>-egress`, applies the rules, gives up root and every capability, and serves; the service joins its network and PID namespaces (`network_mode: "service:<service>-egress"`, `pid: "container:<app>-<service>-egress"`) and starts once it is healthy. A hub's port is published on the sidecar, which owns the namespace. A held service runs one copy: its copies would share the sidecar's namespace and its ports, so a `count` over 1 is refused. |
+| kubernetes | An init container, `egress-rules`, applies the rules as root with `NET_ADMIN` and nothing else, and exits; a native sidecar, `egress` (an init container with `restartPolicy: Always`), serves as uid 61000 with no capability, and the app starts once its startup probe passes. The pod shares one PID namespace (`shareProcessNamespace: true`). A ValidatingAdmissionPolicy keeps `NET_ADMIN` to that init container. |
+| kubernetes, `runtime: podman` | The same pod, with the sidecar as an ordinary container, since `kube play` does not run native sidecars, and without the shared PID namespace, which rootless podman cannot start under `--userns=nomap`. |
+
+The rules container and the sidecar each get 128 MiB of memory (as request and limit on Kubernetes), whatever the
+service's `memory` says, so a held app cannot grow the sidecar into the node's memory. Past it the sidecar is killed
+and the service has no network until it restarts. The service itself still gets only the `memory` it names: with
+none it has no limit, and on Kubernetes the app container has no request either.
+| aws (ECS) | Refused, naming the service: Fargate gives a task no `NET_ADMIN`, so the rules cannot be applied. Use the kubernetes target on EKS. |
+
+The migration, the drain and the resume run the migrator's code, so each is held to the migrator's `egress` too. The app must not run as uid
+61000, which the rules let out. The sidecar refuses to start while another process in the pod runs as 61000, and
+exits when one appears, so an image whose own `USER` is 61000 (`ContainerUser` in the project) fails its health check
+instead of running unheld. It sees the app's processes on compose and Kubernetes, where the app shares its PID
+namespace, and not under `runtime: podman`. On a cluster the admission policy also refuses any container but the
+egress sidecar that asks for the uid (`runAsUser`).
 
 `init` makes a service of every web or console project under the directory that references a `Trax.*` package,
 leaving out test projects, and refuses to replace an existing file without `--force`. `init --target aws` adds a
 `production` environment to fill in, and `init --target kubernetes` a `staging` one on the `try` profile with
 Postgres in the cluster.
+
+### Drain before a rollout
+
+Replacing a host cuts off whatever it is running, and a starting hub fails every run still InProgress from before it
+started. So every target drains the hosts before it replaces any and ends the drain after. The drain runs the new version's image once, inside
+the cluster, the ECS network or the compose stack, the way the migration does, with `--trax-drain <timeout>`: it sets
+a flag in the database that stops every host starting new work (the dispatcher dispatches nothing, the manifest
+manager queues no scheduled run, no worker claims a job) and waits for what is busy to finish, runs and machine
+instances alike. Nothing outside reaches the app to do it. Once the hosts are replaced, `--trax-resume` ends the
+drain. A hub that starts leaves it in place: a drain a failed resume or a crashed deploy left behind ends with Resume
+on the console's scheduler page, or lapses on its own once the roll's own time has passed after the drain finished
+waiting (on Kubernetes ten minutes per Deployment for the roll and again for a rollback, plus ten; on ECS an hour;
+on compose and podman ten minutes). A first deploy has nothing to drain and skips it. [Drain before a deploy](/docs/reference/drain-before-a-deploy) explains
+what counts as busy and what to do when a deploy refuses; [TraxDrain](/docs/sdk-reference/configuration/trax-drain) has the
+arguments.
+
+```json
+"production": { "target": "aws", "drainTimeout": "00:20:00" }
+```
+
+`drainTimeout` is how long the drain waits, per environment, as hours, minutes and seconds; `00:10:00` when left out,
+and anything outside one second to one day is refused. Past it the drain ends itself and the deploy refuses, nothing
+replaced, with the end of the drain's log, which lists what was still busy:
+
+```text
+The drain failed (BackoffLimitExceeded), so no service was moved to the new version. The end of its log, which names any work still busy:
+  run 4182 Orders.Trains.IBillCustomerTrain (InProgress, since 2026-11-24 14:02:11Z, on orders-hub-7f9c)
+  instance checkout/3f2a... checkout (Charging, effect charge in flight, since 2026-11-24 14:05:40Z)
+```
+
+Let the work finish or cancel it, raise `drainTimeout`, or deploy with `--force`, which replaces the hosts anyway and
+keeps the drain until the deploy ends it after the roll. A new hub that starts while drained fails nothing at startup,
+so what the old hosts still run gets their stop grace to finish. On Kubernetes, ECS and the podman runtime `--force` reaches the drain
+itself; compose's file is run by you, so there set `TRAX_DRAIN_FORCE=true` for that one release.
+
+With the drain done, a hub's new copy can start beside the old one: dispatch already copes with two hubs (claims use
+`FOR UPDATE SKIP LOCKED`, the manifest manager an advisory lock), and the startup recovery finds nothing live to fail.
+On Kubernetes and ECS the hubs overlap during the roll; in steady state a hub still runs one copy. The reasoning is
+in `Trax.Cli/docs/adr/0007`.
 
 ### `--target compose`
 
@@ -741,21 +839,65 @@ compose:
 - `database`, Postgres 17, with the app's name as database and user;
 - `rabbitmq`, only when a host connects to RabbitMQ;
 - `migrate`, the image of the service that serves the API, started once with `--trax-migrate` before any service;
-- each service, with `TRAX_MIGRATIONS=skip`, waiting for `migrate` to finish, and `count` becomes
+- `drain`, the same image with `--trax-drain <drainTimeout>` after `migrate`, while the old containers still run.
+  `TRAX_DRAIN_FORCE` (in `.env.example`, `false`) forces it;
+- each service, with `TRAX_MIGRATIONS=skip`, waiting for `migrate` and `drain` to finish, and `count` becomes
   `deploy.replicas`. A hub (a service that serves HTTP and runs the `api` or `scheduler` role, so runs as one) is
   published on `127.0.0.1` only, on its `port` or the first port from 8080 no other service names. No other service
-  publishes a port, so a `port` on one is refused, and so are two services with the same `port`.
+  publishes a port, so a `port` on one is refused, and so are two services with the same `port`;
+- `resume`, the same image with `--trax-resume` once every service has started, which ends the drain when a release
+  restarted no hub.
 
 Every service drops every Linux capability and runs with `no-new-privileges`, `userns_mode: nomap` (the deploying
-user's own uid is not mapped into the container, so an escape does not land as them), `pids_limit: 512` and a
-`mem_limit`: the service's `memory`, 1024 MiB for Postgres and 512 MiB for RabbitMQ. `memswap_limit` is the same
-value, so a service gets no swap on top of its memory. Postgres gets back `CHOWN`,
+user's own uid is not mapped into the container, so an escape does not land as them) and `pids_limit`: the
+service's `pids`, 512 when it names none. A service that names `memory` gets it as `mem_limit`, with `memswap_limit`
+the same value so it gets no swap on top; one that names `cpus` gets `cpus`. Postgres runs in 1024 MiB and RabbitMQ
+in 512 MiB unless the environment's `limits` say otherwise. Every Trax service and `migrate` runs with `read_only:
+true` and a `tmpfs` on `/tmp`: a host writes nothing outside `/tmp`, so a file it writes anywhere else is an error,
+not something that persists. Postgres and RabbitMQ keep a writable root. Postgres gets back `CHOWN`,
 `DAC_OVERRIDE`, `FOWNER`, `SETGID` and `SETUID`, and RabbitMQ the same less `FOWNER`, which their entrypoints need to
 take their data directories and drop to their own users. docker compose refuses `nomap`: an environment with
 `"target": "compose", "engine": "docker"` writes the same stack without `userns_mode` (its header says so), and
 `trax deploy --env <name>` writes it. `engine` is `podman` when left out, and so is the stack written without
 `--env`. A compose environment takes no `settings` or `counts`: the stack reads its settings from the `.env` and
 runs each service's `count`.
+
+An environment's `limits` set the memory, CPU and pids of the services trax runs beside the app, by name:
+
+```json
+"home": {
+  "target": "compose",
+  "limits": {
+    "database": { "memory": 4096, "cpus": 2, "pids": 1024 },
+    "rabbitmq": { "memory": 768 }
+  }
+}
+```
+
+Only `database` and `rabbitmq` are names it takes; an app service's limits are in its own entry. A `rabbitmq` limit
+when no host uses RabbitMQ is refused, since the stack runs none.
+
+A service that names `egress` gets a sidecar, `<service>-egress`, running the egress image with `run`: as root with
+`NET_ADMIN`, `SETUID` and `SETGID` it applies the rules, then gives up root and every capability before it serves
+the resolver and the proxy. The service joins its network namespace with `network_mode: "service:<service>-egress"`,
+waits for its healthcheck (`trax-egress ready`), and keeps every capability dropped. A hub's port is published on
+the sidecar. `migrate` joins the migrator's sidecar the same way. The sidecar is listed with `tcp:database:5432`, and
+`tcp:rabbitmq:5672` when a host uses RabbitMQ, beside the service's domains. If the sidecar restarts, the service's
+namespace goes with it and the service has no network until it is restarted too, which compose does not do on its
+own: nothing leaves, but nothing arrives either. See [Egress](#egress).
+
+A release runs in three commands, which trax prints:
+
+```bash
+podman compose up -d migrate drain && podman compose wait drain && podman compose up -d
+```
+
+A plain `compose up` stops every container whose image changed before it starts any, so the old hub and workers
+would be gone before the drain began, and a run in progress on them would be cut off. The first command migrates and
+starts the drain while the old containers keep running; `compose wait` returns when the drain ends, with its exit
+code, so a drain that refuses stops the release with every old container still serving. The last replaces the
+services and runs `resume`.
+
 Nothing is reachable from other machines until something in front of the stack (a reverse proxy, `tailscale serve`)
 decides who may reach it.
 
@@ -771,6 +913,10 @@ RabbitMQ is `RabbitMq__Host`, `RabbitMq__UserName` and `RabbitMq__Password` (und
 and so is a `compose.yaml` trax did not write.
 
 ### `--target aws`
+
+An aws environment refuses a file in which any service names `egress`, even an empty list: Fargate gives a task no
+`NET_ADMIN`, so the egress rules cannot be applied, and a security group filters by address, not by name. Deploy a
+service that needs egress control to the kubernetes target on EKS.
 
 `trax deploy --env <name>` deploys one environment of `trax.deploy.json` to AWS, as two CloudFormation stacks: the
 foundation `<app>-<name>-base` (the network, security groups, the database and its secret, the Cognito pool) and the
@@ -822,8 +968,22 @@ A deploy:
 3. creates or updates the foundation, then the runtime with the migrate task on the new image, while the services
    stay where they are (a new stack's, and a service the stack does not run yet, at zero);
 4. runs the migrate task (`--trax-migrate`) and stops if it does not exit 0;
-5. rolls every service onto the new image at its count with the ECS circuit breaker on, which rolls a version back
-   if it never gets healthy, and prints the address.
+5. on a stack that already runs, drains the hosts: the migrate task definition run with `--trax-drain <timeout>`,
+   refusing with the end of its log when work is still busy at the timeout (see
+   [Drain before a rollout](#drain-before-a-rollout));
+6. rolls every service onto the new image at its count with the ECS circuit breaker on, which rolls a version back
+   if it never gets healthy. The old and new tasks of a hub overlap (minimum healthy 100%, maximum 200%), which the
+   drain makes safe;
+7. ends the drain with the same task run with `--trax-resume`, after a failed roll too, and prints the address.
+
+Every container stops within 120 seconds of SIGTERM (`StopTimeout`, the most Fargate allows), so the drain has to
+finish before the roll; the stop only covers a host's own shutdown.
+
+Each task is the smallest Fargate size that holds its service's `memory` and `cpus` (Fargate accepts only certain
+pairs: `"memory": 3000` runs as half a vCPU and 3 GB, `"memory": 9000` as two vCPUs and 9 GB). A service that names
+neither runs as half a vCPU and 1 GB, and plan prices each service at its own size. Every Trax container has a
+read-only root filesystem and a scratch `/tmp` volume of the task's own, as on compose and Kubernetes. An aws
+environment refuses `pids` on a service and `limits` (RDS is sized by the profile, and there is no broker to limit).
 
 Every security group replaces the default allow-all egress: the services reach HTTPS and the database, the
 database reaches nothing, and only the load balancer takes traffic from outside, on 443 and 80 in production and
@@ -888,27 +1048,62 @@ kubeconfig context names, with the Kubernetes .NET client: no `kubectl`, no Helm
 
 | Key | Meaning |
 |---|---|
-| `profile` | `production` (the default) or `try`. Only `try` may run Postgres or RabbitMQ in the cluster. The predicate is the profile, not the kind of cluster: a `try` environment on a managed cloud cluster may, a `production` one on kind may not. |
+| `profile` | `production` (the default) or `try`. Only `try` may run Postgres or RabbitMQ in the cluster. The predicate is the profile, not the kind of cluster: a `try` environment on a managed cloud cluster may, a `production` one on k3s may not. |
 | `runtime` | `cluster` (the default): applied to the current kubeconfig context. `podman`: written for one host to run under systemd, below. |
 | `namespace` | The namespace the app goes in; `<app>-<env>` when left out. trax creates it when it does not exist. |
-| `registry` | Where images are pushed and pulled from (`ghcr.io/acme`), as `<registry>/<app>-<service>:<tag>`, with the login docker or podman holds for it. Without one, images are built into the local container runtime as `<app>-<service>:<tag>` with `imagePullPolicy: IfNotPresent`, for a cluster that reads that runtime (Docker Desktop, podman). kind does not: give it a registry, such as kind's local one on `localhost:5001`. |
+| `registry` | Where images are pushed and pulled from (`ghcr.io/acme`), as `<registry>/<app>-<service>:<tag>`, with the login docker or podman holds for it. Without one, images are built into the local container runtime as `<app>-<service>:<tag>` with `imagePullPolicy: IfNotPresent`, for a cluster whose nodes read that runtime. kind is not supported at all: its nodes are containers, so its pods cannot have the user namespace every Trax pod asks for (`hostUsers: false`), and a deploy stops saying so once the node has failed to create a pod three times. |
 | `database` | Required: every kubernetes environment names its database, and a `production` one names a Secret. `{ "secret": ..., "key": ... }`: an existing Secret in the namespace holding the whole Postgres connection string, read as `ConnectionStrings__<trax name>`. Or `{ "inCluster": true }`: Postgres 17 as a StatefulSet of one with a 1Gi volume and a headless Service, refused under `production`. |
 | `settings` | A value for each name the file lists under `settings`, written into the manifests as plain values. |
 | `counts` | Copies per service here, over the file's `count`. |
+| `exposure` | What reaches the hub from outside the cluster. Left out, nothing does. `tailnet`: only the people and devices on your tailnet, through the Tailscale operator, below. `public` is not offered yet and is refused, as is any other value. Refused on `aws` and `compose` environments, which serve through their own load balancer and loopback port. |
+| `tailnet` | With `"exposure": "tailnet"` only. `hostname`: the hub's machine name on the tailnet, `<app>-<env>` when left out. `operatorNamespace`: the namespace the Tailscale operator runs its proxies in, `tailscale` when left out; refused under podman. |
 
 What it applies, in this order:
 
 1. the namespace, unless it exists, once the Secret check has passed;
-2. in a `try` environment, Postgres (when `inCluster`) and RabbitMQ (when a host uses it, as a Deployment of one;
+2. when a service names `egress`, the ValidatingAdmissionPolicy and binding that hold the namespace (below);
+3. the network policies, before anything they protect (below);
+4. in a `try` environment, Postgres (when `inCluster`) and RabbitMQ (when a host uses it, as a Deployment of one;
    refused in `production`, since trax cannot name an existing broker yet), waiting for each to be ready;
-3. the migrate Job `<app>-migrate-<tag>`, a new one each deploy since a Job cannot be changed: the image of the
+5. the migrate Job `<app>-migrate-<tag>`, a new one each deploy since a Job cannot be changed: the image of the
    service that serves the API, run with `--trax-migrate`, `backoffLimit: 0`, kept a day after it finishes. If it
    fails, trax prints the end of its log and stops; no Deployment is touched;
-4. each service as a Deployment with `TRAX_MIGRATIONS=skip`. A hub (it serves HTTP and runs `api` or `scheduler`)
-   runs one copy with `strategy: Recreate`, so the old hub stops before the new one starts: a few seconds without a
-   hub, never two. Workers roll at their count. A hub also gets a ClusterIP Service on port 8080, and every service
-   that reports a health endpoint gets readiness and liveness probes on it;
-5. waits for each Deployment to roll out: every copy updated and available, within ten minutes.
+6. with `"exposure": "tailnet"`, a new proxy secret in the Secret `<app>-<env>-tailnet` (below);
+7. when any service already runs, the drain Job `<app>-drain-<tag>`: the same image run with `--trax-drain
+   <drainTimeout>`, `backoffLimit: 0`, waited on for its timeout plus five minutes. If it fails, trax prints the end
+   of its log, which lists what was still busy, and stops; no Deployment is touched (see
+   [Drain before a rollout](#drain-before-a-rollout));
+8. each service as a Deployment with `TRAX_MIGRATIONS=skip`. A hub (it serves HTTP and runs `api` or `scheduler`)
+   runs one copy and rolls with `maxSurge: 1` and `maxUnavailable: 0`: the new hub starts beside the old one and the
+   old one stops only once the new one is ready, so the API stays up. Its pod sleeps ten seconds in `preStop` (the
+   kubelet's `sleep` action, so the image needs no shell) so the Service stops routing to it before it is signalled.
+   Workers roll at their count. Every Trax pod gets `terminationGracePeriodSeconds` of the drain's timeout plus those
+   ten seconds, which only matters after `--force`. A hub also gets a ClusterIP Service on port 8080, and every
+   service that reports a health endpoint gets readiness and liveness probes on it. With `"exposure": "tailnet"`,
+   the edge and the operator's Ingress too;
+9. waits for each Deployment to roll out: every copy updated and available, within ten minutes. Each Deployment has
+   `progressDeadlineSeconds: 300`, so a rollout that makes no progress for five minutes (a crash loop, an image that
+   never passes readiness) ends the wait as soon as the cluster marks it, not at ten minutes;
+10. the resume Job `<app>-resume-<tag>` (`--trax-resume`), after a rollback too. If it fails the deploy still stands
+   and says so: the drain it left behind ends with Resume on the console's scheduler page, or lapses on its own. A
+   hub that starts leaves it in place.
+
+A Job or a rollout whose pod can never start ends its wait at once rather than at its deadline, saying why: an image
+it cannot pull, a Secret key it cannot read, a node that cannot give it a user namespace of its own. So does a pod no
+node can take, once the scheduler has left it unplaced for two minutes (time enough for a cluster autoscaler to add
+a node), with the scheduler's reason: `its pod cannot be scheduled: 0/1 nodes are available: 1 Insufficient cpu`.
+The `cpus` and `memory` of every service are requests as well as limits, and a deploy briefly runs a second hub and
+the migrate and drain Jobs beside them, so a cluster needs room for those on top of what the app runs.
+
+When a service does not roll out, the deploy puts every service back as it was before it started, as ECS's circuit
+breaker does: each Deployment that existed gets its earlier spec applied again (the pod template, the copies and the
+strategy it had) and is waited on, and one this deploy created is deleted. The error names the service that failed
+and ends with what was done. The migration is not undone: the version before it served while it ran, so it must
+already work on the new schema. A first deploy has nothing to go back to and is left as it is. If the rollback itself
+does not roll out, the error says the services are in between versions. A deploy you interrupt (Ctrl-C) is not rolled
+back, and its drain is not ended: it lapses once the roll and a rollback could have run (ten minutes per Deployment
+for each, plus ten, after the drain finished waiting), or Resume on the console's scheduler
+page ends it. Restarting a hub does not.
 
 Services, Deployments and the StatefulSet are applied server-side under the field manager `trax`. Every object
 carries `app.kubernetes.io/name`, `app.kubernetes.io/part-of: <app>`, `app.kubernetes.io/managed-by: trax` and
@@ -916,12 +1111,62 @@ carries `app.kubernetes.io/name`, `app.kubernetes.io/part-of: <app>`, `app.kuber
 app or one trax would apply over that has no `trax/app` label. A namespace with no label (one you made with
 `kubectl` to hold the Secret) is used.
 
-Every container runs under the same limits compose gives it: every capability dropped and only Postgres's and
-RabbitMQ's own added back, `allowPrivilegeEscalation: false`, `seccompProfile: RuntimeDefault` (and the
+Every container runs under the same limits compose gives it: every capability dropped and only Postgres's own added
+back, `allowPrivilegeEscalation: false`, `seccompProfile: RuntimeDefault` (and the
 `container.seccomp.security.alpha.kubernetes.io/<container>: runtime/default` annotation, which `podman kube play`
-reads in its place), `runAsNonRoot` for every Trax container, the service's `memory` as both request and limit, and
-a pod with `hostUsers: false`, no service account token and no service links. Kubernetes has no per-container
-pids limit, so the node's applies.
+reads in its place), `runAsNonRoot` for every Trax container, RabbitMQ as its image's own user (999) with no
+capability at all (started as root, its readiness probe can write the Erlang cookie as root before the server, which
+then cannot read it), the service's `memory` as both request and limit, and
+a pod with `hostUsers: false`, no service account token and no service links. A service's `memory` and `cpus`
+are its request and its limit, both the same; one that names neither has no request or limit. Every Trax container
+has `readOnlyRootFilesystem: true` and an `emptyDir` mounted on `/tmp`. Kubernetes has no per-container pids limit
+(the node's `podPidsLimit` applies), so a service or `limits` entry that names `pids` is refused. `limits.database`
+applies to Postgres when it runs in the cluster and is refused otherwise; `limits.rabbitmq` applies to RabbitMQ and
+is refused when no host uses it.
+
+A pod whose service names `egress` gets two init containers before the app. `egress-rules` runs the egress image's
+`rules` as root (`runAsUser: 0`) with every capability dropped but `NET_ADMIN`, read-only, and exits once the rules
+are in place. `egress` runs `serve` as uid 61000 with no capability and `restartPolicy: Always`, which makes it a
+native sidecar (Kubernetes 1.29 and later): it starts before the app, the app starts once its startup probe
+(`trax-egress ready`) passes, and it runs beside the app for the pod's life. Both read `TRAX_EGRESS_ALLOW`: the
+service's domains, then `tcp:database:5432` when Postgres runs in the cluster and `tcp:rabbitmq:5672` when RabbitMQ
+does. An existing database is allowed by the hosts of the connection string in its Secret, passed to both as
+`TRAX_EGRESS_POSTGRES` by `secretKeyRef`, so its address is written nowhere new. That allows the address, not the
+database: point it at a database on an address of its own, not a shared pooler that serves other customers
+([the egress image](/docs/reference/egress-image#the-list)). The migrate, drain and resume Jobs'
+pods are held to the migrator's egress the same way, so they still reach the database; the native sidecar stops
+when the Job's container does.
+
+The network policies decide what may reach a pod, the egress what may leave it, and the two do not overlap: the
+egress proxy connects from the pod's own address, so the in-cluster database's policy admits a held hub exactly as
+it admits one that is not held. A tailnet exposure's edge is not a service of the app and is never held; its own
+network policy is what limits it.
+
+Pod Security's `baseline` level refuses `NET_ADMIN` on every container, init containers included, so a namespace
+with egress cannot be held by it. trax applies a ValidatingAdmissionPolicy and its binding instead, both named
+`trax-egress-<namespace>` and bound to that namespace alone (cluster-wide objects, so the deploying identity needs
+to create them; Kubernetes 1.30 or later). On every pod created or changed there, an ephemeral container added with
+`kubectl debug` included, it refuses:
+
+- a container or ephemeral container that adds a capability outside the `baseline` set (`NET_ADMIN` among them);
+- an init container that adds one, unless it is named `egress-rules`, runs exactly the egress image trax rendered
+  (by digest) with its own entrypoint and the one argument `rules`, is not a sidecar, and adds `NET_ADMIN` and
+  nothing else. When the services ran another egress image before (after a trax upgrade or an `egressImage`
+  change), the deploy allows that one too until the services have rolled, so the old version's pods can still be
+  created during the roll and on a rollback. A roll that succeeds narrows it to the new image; one that rolls back
+  leaves both until the next deploy;
+- a privileged container, and a pod on the node's network, PID or IPC namespace;
+- a pod or container that sets `runAsUser: 61000`, the uid the egress rules let out, other than the `egress`
+  sidecar trax rendered;
+- in a pod held to an egress list (one with the `egress-rules` init container), any container, init and ephemeral
+  ones included, that does not set `allowPrivilegeEscalation: false` and drop `SETUID` and `SETGID` (or `ALL`), or
+  adds either back. A process that can change its uid could become 61000 after admission. Every container trax
+  renders already does; for `kubectl debug` use `--profile=restricted`. Pods that are not held, such as Postgres in
+  the cluster, whose entrypoint needs `SETUID`, are not affected.
+
+A deploy refuses the policy or binding when another app wrote it, or something other than trax did. `destroy`
+deletes both. A deploy that no longer has a service with `egress` leaves them in place: they still refuse
+`NET_ADMIN` to everything but the egress rules.
 
 trax writes no secret value into a manifest. Each name under `secrets`, and `POSTGRES_PASSWORD` and
 `RABBITMQ_PASSWORD` when Postgres or RabbitMQ run in the cluster, is read by `secretKeyRef` from one Secret,
@@ -940,19 +1185,86 @@ rm orders-staging.env
 The values go through a file rather than `--from-literal`, which would leave them in your shell's history and in
 the process list.
 
-Nothing is exposed outside the cluster yet. Until it is, reach a hub with
-`kubectl port-forward -n orders-staging service/hub 8080`.
+Every pod in the namespace refuses connections unless a network policy admits them. trax applies `<app>-deny`, which
+selects every pod and admits nothing, and `<app>-within`, which lets the app's own pods (`trax/app: <app>`) reach
+each other: the hubs, Postgres and RabbitMQ accept only the app's pods, not any other pod in the cluster. The
+policies limit what comes in, not what goes out. They need a network plugin that enforces NetworkPolicy (Calico,
+Cilium, the VPC CNI with its network policy agent on EKS, kindnet on recent kind); on one that does not, they are
+accepted and ignored, and nothing says so, except on a tailnet deploy, which refuses it (below).
+
+Without an `exposure`, reach a hub with `kubectl port-forward -n orders-staging service/hub 8080`.
+
+#### Exposed on a tailnet
+
+`"exposure": "tailnet"` puts the hub on your tailnet and nowhere else: no LoadBalancer, no NodePort, no Ingress but
+the Tailscale operator's. The cluster needs the [Tailscale Kubernetes
+operator](https://tailscale.com/kb/1236/kubernetes-operator) installed, with its OAuth client, and MagicDNS and HTTPS
+certificates turned on for the tailnet. trax does not install it and writes no Tailscale credential: the operator
+holds its own.
+
+```json
+"staging": {
+  "target": "kubernetes",
+  "exposure": "tailnet",
+  "tailnet": { "hostname": "orders" },
+  "database": { "secret": "orders-db", "key": "connection" }
+}
+```
+
+Beside the app it renders:
+
+- the ConfigMap, Deployment and Service `tailnet`: Caddy (`caddy:2.11.9`) as an unprivileged user with every
+  capability dropped and a read-only root, which forwards every request to the hub and sets `Trax-Proxy-Secret` on
+  it, replacing any copy the caller sent. This edge exists because Tailscale serve, which the operator's proxy runs,
+  fills in who the caller is but cannot add a header of its own;
+- the Ingress `tailnet` with `ingressClassName: tailscale` and the edge as its backend, which the operator turns into
+  a proxy pod on the tailnet at `https://<hostname>.<tailnet>.ts.net`;
+- the policy `<app>-tailnet`, which admits to the edge only the operator's proxy pod for that Ingress (by the labels
+  the operator gives it, `tailscale.com/parent-resource: tailnet` and the rest, in `operatorNamespace`), and
+  `<app>-tailnet-hub`, which admits the edge to the hub. The edge is left out of `<app>-within`, so it reaches
+  nothing else;
+- on the hub only: `Trax__Deploy__Exposure=tailnet`, and `Trax__Deploy__ProxySecret` read from the Secret
+  `<app>-<env>-tailnet`.
+
+Before anything else runs, right after the policies, a tailnet deploy proves the network plugin enforces them: it
+starts `tailnet-canary`, Caddy answering on 8081 with the edge's labels, so `<app>-tailnet` admits only the operator's
+proxy to it, and `tailnet-control`, the same without the edge's labels, which `<app>-within` admits the app's pods to.
+It then runs the Job `<app>-tailnet-probe-<tag>` from one of the app's own pods, which must reach the control and
+fail to reach the canary three tries in a row within a minute. The control is what makes a refusal mean something:
+a probe that cannot connect anywhere (no `wget`, a wrong port, a proxy in the way) fails too. If the probe gets
+through to the canary, or never reaches the control, the deploy stops, nothing is exposed, and the error ends with
+the probe's log: the edge vouches for whoever reaches it, so a plugin that ignores NetworkPolicy would let any pod in
+the cluster sign in as anyone. The listeners and their Services are deleted either way; the Job is kept a day. A service named `tailnet`, `tailnet-canary` or `tailnet-control` is refused in a tailnet environment, since the deploy
+applies its own objects under those names.
+
+trax writes that Secret itself, with a new random value on every deploy (32 bytes, base64url), after the drain and
+before the services, so a deploy refused before the roll leaves the value the running pods have; the hub and the edge both restart onto it in the same rollout, so for those seconds a
+signed-in request is anonymous. A deploy that rolls back writes the value it replaced back before it restores the
+Deployments, so the old hub and the edge put back beside it hold the same one. A Secret of that name that trax did
+not write is refused. Workers and the migrate
+Job never see it.
+
+A hub that signs people in by tailnet identity
+([`AddTraxTailscaleAuth`](/docs/sdk-reference/api-auth/add-trax-tailscale-auth)) is refused, before anything is
+built, everywhere else: on an environment without `"exposure": "tailnet"`, on any service but the exposed hub, on
+`compose` and on `aws`. A tailnet exposure serves one hub; an app with two is refused. Why the trust is built this
+way is in [Tailnet sign-in](/docs/security/tailnet-sign-in).
+
+The operator's HA mode (a `ProxyGroup`) labels its pods differently and is not supported: the policy would admit
+nothing.
 
 ```bash
 trax deploy plan --env staging       # write the manifests under .trax/deploy/kubernetes/<app>-<env>/, without a cluster
 trax deploy --env staging
 trax deploy status --env staging
-trax deploy logs hub --env staging --follow   # or migrate, database, rabbitmq
+trax deploy logs hub --env staging --follow   # or migrate, database, rabbitmq, tailnet (the edge)
 trax deploy destroy --env staging    # asks for the namespace's name; --delete-data also deletes the database's volume
 ```
 
-`destroy` deletes the app's Deployments, StatefulSet, Jobs and Services in the namespace. It keeps the namespace,
-the Secret, and an in-cluster database's volume, which the next deploy uses again; `--delete-data` deletes the
+`destroy` deletes the app's Deployments, StatefulSet, Jobs, Ingress, Services, ConfigMaps and network policies in the
+namespace, the Secret `<app>-<env>-tailnet` that trax wrote, and the egress policy and binding when trax wrote them for
+this app. It keeps the namespace, the app's Secret, and an
+in-cluster database's volume, which the next deploy uses again; `--delete-data` deletes the
 volume and every row in it.
 
 #### On EKS
@@ -993,11 +1305,23 @@ What a deploy does, in order, changing nothing until every check passes:
 4. the images are pushed to ECR;
 5. the foundation stack `<app>-<env>-base` is created or updated, with a role the pods assume through EKS Pod Identity
    (the cluster needs the Pod Identity Agent add-on), allowed to read only the database's secret and
-   `<app>-<env>/app/*`, and one Pod Identity association per service account;
+   `<app>-<env>/app/*`, one Pod Identity association per service account, and an interface VPC endpoint for
+   Secrets Manager in the service subnets. The endpoint's policy lets only this account's principals read this
+   account's secrets (`secretsmanager:GetSecretValue`), its security group admits 443 from the VPC's range, and its
+   private DNS is off, so other workloads in the VPC keep the public endpoint and a second environment in the same
+   VPC can add its own. Its subnets must be in different availability zones;
 6. the manifests are applied as on any cluster, with a ServiceAccount per service and, under `pods`, the
-   SecurityGroupPolicy. Each container is given the database's address with no password, and
+   SecurityGroupPolicy. Each container is given the database's address with no password,
    `Trax__AwsSecrets__<n>__...` entries that tell `AddTraxAwsSecretsAsync` where to read the password and each
-   secret.
+   secret, and `AWS_ENDPOINT_URL_SECRETS_MANAGER`, the endpoint's own name (it resolves to the endpoint's private
+   addresses), so the AWS SDK reads them through the endpoint.
+
+A service that names `egress` on EKS is allowed, beside its domains, the foundation's database by its address
+(`tcp:<rds address>:5432`), the EKS Pod Identity agent its role's credentials come from (`tcp:169.254.170.23:80`),
+and the foundation's Secrets Manager endpoint (`tcp:<endpoint name>:443`), never Secrets Manager's public name,
+whose addresses serve every AWS account. Instance metadata (`169.254.169.254`) stays out of
+reach. Security Groups for Pods and egress work together: the group decides what the pod's address may reach in the
+VPC, the egress what the app inside it may.
 
 `destroy` deletes the app's objects in the namespace, then the foundation as on ECS: production's database leaves a
 final snapshot, and `--delete-data` also deletes the images and the app's secrets.
@@ -1022,13 +1346,13 @@ unit per pod, which systemd starts at boot and restarts when it dies. compose st
 uses RabbitMQ, each name under `secrets`, and the database's `key` when it names one). Then it builds the images into
 this host's podman as `localhost/<app>-<service>:<tag>` and writes:
 
-- under `.trax/deploy/podman/<app>-<env>/`: a YAML file and a `.kube` unit for each pod, the migration's YAML, and a
-  `.network` unit, `<app>-<env>`, that every pod joins. None of them holds a secret value;
+- under `.trax/deploy/podman/<app>-<env>/`: a YAML file and a `.kube` unit for each pod, the migration's, the
+  drain's and the resume's YAML, and a `.network` unit, `<app>-<env>`, that every pod joins. None of them holds a secret value;
 - `~/.config/trax/<app>-<env>/secret.yaml` (or under `$XDG_CONFIG_HOME`), mode 0600 in a 0700 folder: the
   Secrets with their values from `.env`, which each unit plays before its pod. It is never written beside the
   project.
 
-It starts nothing. It prints the three commands that do:
+It starts nothing. It prints the commands that do:
 
 ```bash
 mkdir -p ~/.config/containers/systemd && cp .trax/deploy/podman/orders-home/*.{kube,network} ~/.config/containers/systemd/
@@ -1036,15 +1360,60 @@ systemctl --user daemon-reload
 systemctl --user restart orders-home-database.service orders-home-hub.service orders-home-reports.service orders-home-worker.service
 ```
 
+Later releases restart only what changed. trax compares the files it is about to write with the ones the last
+deploy left in `.trax/deploy/podman/<app>-<env>/`: a unit whose own `.kube` or pod YAML changed restarts, and so does
+the unit that runs a changed migration. A release that changes only the app's images leaves Postgres and RabbitMQ
+running and says so:
+
+```text
+/usr/bin/flock ~/.config/trax/orders-home/secret.lock /usr/bin/podman kube play --replace ~/.config/trax/orders-home/secret.yaml && /usr/bin/podman kube play --replace --userns=nomap --network orders-home .trax/deploy/podman/orders-home/orders-home-migrate.yaml && test "$(/usr/bin/podman wait orders-home-migrate-pod-migrate)" = 0 && /usr/bin/podman kube play --replace --userns=nomap --network orders-home .trax/deploy/podman/orders-home/orders-home-drain.yaml && test "$(/usr/bin/podman wait orders-home-drain-pod-drain)" = 0 && { systemctl --user restart orders-home-hub.service orders-home-reports.service orders-home-worker.service; /usr/bin/podman kube play --replace --userns=nomap --network orders-home .trax/deploy/podman/orders-home/orders-home-resume.yaml && /usr/bin/podman wait orders-home-resume-pod-resume >/dev/null; }; ...
+The migration runs first, then the drain stops every host starting new work and waits for what is busy; the restart, then the end of the drain, run only once both exit 0. ...
+Unchanged, left running: orders-home-database.
+Each restarted service stops before its new version starts, so it is down for that moment; for no downtime, deploy to a cluster.
+```
+
+A release that restarts one of the app's own units drains first, as above: systemd stops a unit before anything in
+it could run, so the drain is a pod of its own. The migrate pod runs before it, as on every other target, so the drain
+runs on the schema it was built for, and the restart and the resume pod after it are chained to both exiting 0, so a
+failed migration or a refused drain never ends a drain this release did not set. Past the timeout
+`podman logs orders-home-drain-pod-drain` lists what was still busy; `--force` writes the drain pod to roll anyway.
+A first release, or one that restarts only Postgres or RabbitMQ, does not drain. A changed network or changed
+Secrets restart every unit, since each unit plays the Secrets before its pod; every play holds
+`secret.lock` beside them, since units that start together would otherwise replace one Secret over each other. A service
+the stack no longer has (RabbitMQ after the last host stops using it, say) is stopped and its unit removed. A
+restarted unit stops its pod before the new one starts, so a release here always has a moment without that service;
+for none, deploy to a cluster, one machine included (see [one machine, no downtime](/docs/reference/deploy-to-one-machine-with-no-downtime)).
+
+With `"exposure": "tailnet"` the hub is published on no host port. A pod of its own, `<app>-<env>-tailnet`, runs
+beside it instead: Tailscale (`tailscale/tailscale:v1.104.7`) in userspace networking, so it needs no capability and
+no `/dev/net/tun`, which joins the tailnet as `tailnet.hostname` and serves HTTPS to the edge; and the same Caddy
+edge, listening only on a Unix socket in that pod, which passes to the hub by its name on the app's network. In
+userspace networking tailscaled hands any tailnet connection that serve does not take to `127.0.0.1` on the same
+port, so nothing in that pod listens on TCP, and the hub, in another pod, is not on its loopback. A container on the
+network that reaches the hub directly has no proxy secret. Tailscale runs as uid 65533, is held to no egress list, and
+keeps its node key on the claim `<app>-<env>-tailscale`, so a restart is the same machine. Give it an auth key in
+`.env` as `TAILSCALE_AUTH_KEY` (from the admin console's Keys page; a reusable, pre-approved key, tagged if you want
+the device owned by a tag), which goes into the Secret with the rest and is read only by Tailscale. trax never
+creates one. Each deploy also writes a new proxy secret to `~/.config/trax/<app>-<env>/tailnet.next.yaml`, mode
+0600, and the printed restart step moves it onto `tailnet.yaml`, which only the hub's unit and the tailnet unit play.
+A drain that refuses stops the install before the move, so a unit that restarts on its own meanwhile still reads the
+secret its peer runs with. The tailnet unit `Requires=` the hub's, so it restarts whenever
+the hub does and the two always hold the same secret.
+
 What differs from a cluster, and why:
 
 | On a cluster | Under podman |
 |---|---|
 | A namespace per environment | A network per environment; every pod's name starts with `<app>-<env>`, since podman's pod names are global. `namespace` and `registry` are refused. |
 | A Service in front of each hub, Postgres and RabbitMQ | No Service: on the network each container answers by its own name (`database`, `rabbitmq`), the name a Service gives it, so the connection strings are the same. A hub with a `port` is published on `127.0.0.1:<port>`. |
+| Readiness and liveness probes on the health endpoint | None. `kube play` runs an `httpGet` probe as `curl` inside the container, which a Trax image does not have, so a liveness probe would restart the hub every few dozen seconds, and with it the startup recovery that fails its live runs. Nothing routes on readiness; check `/trax/health` from outside. |
 | Postgres as a StatefulSet | A Deployment of one on a claim, which podman keeps as the named volume `<app>-<env>-data`; `kube play` has no StatefulSet. |
-| A migrate Job the deploy waits on | The migration runs in the migrator's unit before its pod starts (after waiting up to two minutes for this host's Postgres), and fails the unit unless it exits 0, printing the end of its log. Every other service's unit `Requires=` the migrator's. |
+| A migrate Job the deploy waits on | The migration runs in the migrator's unit before its pod starts (after waiting up to two minutes for this host's Postgres), and fails the unit unless it exits 0, printing the end of its log. Every other service's unit `Requires=` the migrator's. The migrate, drain and resume pods are written as Pods that never restart, not Jobs: `kube play` runs a Job only from podman 5, and a Pod from 4.9 (Ubuntu 24.04's podman) on. |
 | `hostUsers: false` | `UserNS=nomap` on every unit, as compose: rootless podman cannot map a range per pod. |
+| Network policies | None: `kube play` does not read them. The network holds only this app's pods, and a tailnet exposure's edge listens on a Unix socket only its own pod mounts. |
+| The operator's Ingress and the edge's own pod | Tailscale and the edge in a pod of their own beside the hub's. |
+| The egress as a native sidecar, and an admission policy | `kube play` waits for every init container to exit, so a native sidecar would hold the pod from starting (podman 6.2). The sidecar is an ordinary container that runs `run`: it puts the rules back as it starts, then gives up root and every capability and serves. The `egress-rules` init container stays, with `io.podman.annotations.init.container.type: always` so it runs on every start of the pod. `podman pod restart` makes the pod's network namespace afresh without running init containers, and the sidecar putting the rules back is what holds it then; restart the unit instead, which plays the pod again. No admission policy: podman reads none. After the migration, the migrate pod's sidecar is stopped, and the drain and resume pods' once each has run. |
+| A held hub with a tailnet exposure | The hub's pod has the egress and its rules; Tailscale and the edge are in their own pod, which the rules do not reach, so Tailscale reaches its control plane and relays as it would anywhere. A Tailscale state volume an earlier deploy wrote as another user has to be removed (or given to uid 65533). |
 
 `plan --env home` writes the same files without building an image or writing the secret file. `status`, `logs`
 and `destroy` do not reach a podman environment and say what does: `systemctl --user status`, `journalctl --user -u

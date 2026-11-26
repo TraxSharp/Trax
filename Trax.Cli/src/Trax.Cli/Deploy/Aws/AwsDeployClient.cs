@@ -426,7 +426,7 @@ internal sealed class AwsDeployClient(string region, TimeProvider clock) : IAwsD
         var task =
             run.Tasks?.FirstOrDefault()
             ?? throw new InvalidOperationException(
-                "ECS did not start the migrate task: "
+                $"ECS did not start the {request.Label} task: "
                     + string.Join("; ", (run.Failures ?? []).Select(f => $"{f.Arn} {f.Reason}"))
             );
         var id = task.TaskArn[(task.TaskArn.LastIndexOf('/') + 1)..];
@@ -447,7 +447,7 @@ internal sealed class AwsDeployClient(string region, TimeProvider clock) : IAwsD
                     .ConfigureAwait(false)
             ).Tasks.NotNull()[0];
             if (!string.Equals(current.LastStatus, last, StringComparison.Ordinal))
-                progress($"  migrate task {current.LastStatus}");
+                progress($"  {request.Label} task {current.LastStatus}");
             last = current.LastStatus;
             if (!string.Equals(current.LastStatus, "STOPPED", StringComparison.Ordinal))
                 continue;
@@ -537,6 +537,27 @@ internal sealed class AwsDeployClient(string region, TimeProvider clock) : IAwsD
                         : AssignPublicIp.DISABLED,
                 },
             },
+            Overrides =
+                request.Command is null && request.Environment is null
+                    ? null
+                    : new TaskOverride
+                    {
+                        ContainerOverrides =
+                        [
+                            new ContainerOverride
+                            {
+                                Name = request.Container,
+                                Command = request.Command is null ? null : [.. request.Command],
+                                Environment = request
+                                    .Environment?.Select(e => new Amazon.ECS.Model.KeyValuePair
+                                    {
+                                        Name = e.Key,
+                                        Value = e.Value,
+                                    })
+                                    .ToList(),
+                            },
+                        ],
+                    },
         };
 
     public async Task DeleteStackAsync(string stack, Action<string> progress, CancellationToken ct)

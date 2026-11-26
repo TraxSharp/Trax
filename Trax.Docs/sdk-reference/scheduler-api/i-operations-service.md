@@ -11,6 +11,9 @@ namespace: Trax.Scheduler.Services.Operations
 source:
   - Trax.Scheduler/src/Trax.Scheduler/Services/Operations/IOperationsService.cs
   - Trax.Scheduler/src/Trax.Scheduler/Services/Operations/OperationsService.cs
+  - Trax.Scheduler/src/Trax.Scheduler/Services/Operations/OperationsService.Drain.cs
+  - Trax.Scheduler/src/Trax.Scheduler/Services/Operations/DrainStatus.cs
+  - Trax.Scheduler/src/Trax.Scheduler/Services/Operations/DrainBusyWork.cs
 ---
 
 # IOperationsService
@@ -67,6 +70,9 @@ public interface IOperationsService
     Task<ManifestGroupDependencyGraph?> GetManifestGroupDependencyGraphAsync(long groupId, CancellationToken ct);
     Task<ManifestGroupDependencyGraph> GetGlobalManifestGroupGraphAsync(CancellationToken ct);
     SchedulerConfigSnapshot GetSchedulerConfig();
+    Task<DrainStatus> GetDrainAsync(CancellationToken ct);
+    Task<OperationResult> DrainAsync(TimeSpan? duration, string startedBy, CancellationToken ct);
+    Task<OperationResult> EndDrainAsync(CancellationToken ct);
 }
 
 public record OperationResult(bool Success, long? Id = null, int? Count = null, string? Message = null);
@@ -79,6 +85,7 @@ public record OperationResult(bool Success, long? Id = null, int? Count = null, 
 | [Queueing and running](#queueing-and-running) | `QueueTrainAsync`, `RunTrainAsync`, `RequeueExecutionAsync`, `ResumeExecutionAsync` |
 | [Batch actions](#batch-actions) | `CancelExecutionsAsync`, `CancelWorkQueueEntriesAsync`, `CancelWorkQueueEntryAsync`, `SetManifestsEnabledAsync`, `SetManifestsReplayDecisionsOnRetryAsync`, `SetManifestGroupsEnabledAsync`, `SetAllManifestGroupsEnabledAsync`, `CancelManifestGroupsAsync`, `TriggerManifestAsync`, `TriggerManifestsAsync`, `TriggerManifestGroupsAsync`, `UpdateManifestAsync` |
 | [Settings](#settings) | `UpdateManifestGroupAsync`, `GetSchedulerConfig`, `UpdateSchedulerConfigAsync` |
+| [Drain](#drain) | `GetDrainAsync`, `DrainAsync`, `EndDrainAsync` |
 | [Read models](#read-models) | `GetManifestExecutionStatsAsync`, `GetManifestGroupExecutionStatsAsync`, `GetUpcomingRunsAsync`, `GetLogsAsync`, `CountLogsAsync`, `CountLogsCappedAsync`, `GetWorkQueueEntryDetailAsync`, `GetRecordedDecisionsAsync`, `GetDashboardMetricsAsync`, `GetMetricSeriesAsync`, `GetAttentionAsync`, `GetManifestGroupDependencyGraphAsync`, `GetGlobalManifestGroupGraphAsync` |
 | [State-machine instances](#state-machine-instances) | `GetMachineInstancesAsync`, `CountMachineInstancesAsync`, `GetMachineInstanceAsync`, `GetMachineInstanceStateCountsAsync`, `WatchMachineInstancesAsync`, `GetMachineInstanceRunsAsync`, `GetMachineInstanceTransitionsAsync`, `CancelMachineInstanceAsync` |
 | [State-machine definitions](#state-machine-definitions) | `GetMachinesAsync`, `GetMachineBoardAsync` |
@@ -404,6 +411,32 @@ metadata retention under 1 second; a negative retry count, retry delay or dead-l
 any duration over ten years; a `MaxActiveJobs` below 1; a `LocalWorkerCount` outside 1 to 256; a
 failure count window outside 1 second to ten years; or a backoff multiplier below 1 or not finite.
 The dashboard's Server Settings page and the API's `updateScheduler` call it.
+
+## Drain
+
+A drain stops every host sharing the database from starting new work until it lapses: the job
+dispatcher dispatches nothing, the manifest manager queues no scheduled run and no local worker
+claims a job. See [TraxDrain](/docs/sdk-reference/configuration/trax-drain) for what it does and
+[Drain before a deploy](/docs/reference/drain-before-a-deploy) for why. The console's Drain and
+Resume and the API's `operations.config.drain` and `resume` call these.
+
+| Method | Returns |
+|--------|---------|
+| `GetDrainAsync(ct)` | `DrainStatus` |
+| `DrainAsync(duration, startedBy, ct)` | `OperationResult` |
+| `EndDrainAsync(ct)` | `OperationResult` |
+
+`GetDrainAsync` returns a `DrainStatus`: `Drained`, `Until`, `StartedAt` and `StartedBy` (null
+when no drain is in force), `Busy`, the first 50 pieces of work a drain waits on, and `BusyTotal`.
+Each `DrainBusyWork` has a `Kind` (`run` or `instance`), an `Id` (a run's id, or an instance's
+machine and id), a `Name` (the train or the machine), a `State`, `Since` and the `Host` a run is
+on. The busy list is read whether or not a drain holds.
+
+`DrainAsync` sets a drain lasting `duration`, `DefaultDrainDuration` (20 minutes) when null,
+replacing one in force, and records `startedBy`. A duration under `MinimumDrainDuration` (1 minute)
+or over 24 hours, or a blank `startedBy` or one over 256 characters, is a failed result and nothing
+is written. `EndDrainAsync` deletes the drain: `Count` is 1 when one held, 0 when none did. Both
+signal `SchedulerConfig` on the change feed.
 
 ## Read models
 

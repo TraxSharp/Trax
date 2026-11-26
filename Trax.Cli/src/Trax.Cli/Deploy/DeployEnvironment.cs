@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Trax.Effect.Configuration.Deploy;
 
 namespace Trax.Cli.Deploy;
 
@@ -16,6 +17,9 @@ internal sealed class DeployEnvironment
     public const string Docker = "docker";
 
     public const string Cluster = "cluster";
+
+    public const string Tailnet = "tailnet";
+    public const string Public = "public";
 
     /// <summary>Where the environment runs: <c>compose</c>, <c>aws</c> (ECS Fargate) or <c>kubernetes</c>.</summary>
     public string? Target { get; set; }
@@ -44,6 +48,18 @@ internal sealed class DeployEnvironment
     /// </summary>
     [JsonPropertyName("aws")]
     public DeployEnvironmentAws? Eks { get; set; }
+
+    /// <summary>
+    /// What reaches a kubernetes environment's hub from outside: <c>tailnet</c>, only the people and devices on the
+    /// user's tailnet, through a Tailscale proxy trax renders (the Tailscale operator's Ingress on a cluster, a sidecar
+    /// in the hub's pod under podman). Without it nothing outside the cluster reaches the hub, and under podman the hub
+    /// is published on 127.0.0.1 only. <c>public</c> is not offered yet.
+    /// </summary>
+    public string? Exposure { get; set; }
+
+    /// <summary>How a <c>tailnet</c> exposure is named and reached.</summary>
+    [JsonPropertyName("tailnet")]
+    public DeployEnvironmentTailnet? TailnetOptions { get; set; }
 
     /// <summary>A kubernetes environment's Postgres: an existing one named by secret, or one in the cluster.</summary>
     public DeployEnvironmentDatabase? Database { get; set; }
@@ -79,8 +95,44 @@ internal sealed class DeployEnvironment
     /// <summary>The sign-in the stack creates: <c>cognito</c>, or none when the hosts trust an existing issuer.</summary>
     public DeployAuth? Auth { get; set; }
 
+    /// <summary>
+    /// Limits on the services trax runs beside the app, by name: <c>database</c> and <c>rabbitmq</c>. On compose, and
+    /// on kubernetes where they run in the cluster; aws runs neither.
+    /// </summary>
+    public SortedDictionary<string, DeployLimits> Limits { get; set; } =
+        new(StringComparer.Ordinal);
+
     /// <summary>Copies per service in this environment, over the file's <c>count</c>.</summary>
     public SortedDictionary<string, int> Counts { get; set; } = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// How long a deploy waits for busy work after it drains the hosts and before it replaces them, as a .NET time span
+    /// (<c>00:10:00</c>). Ten minutes when not set. Past it the deploy refuses and lists what is still busy, unless it
+    /// was run with <c>--force</c>.
+    /// </summary>
+    public string? DrainTimeout { get; set; }
+
+    /// <summary>
+    /// <see cref="DrainTimeout"/> as a time span, or <see cref="TraxDrain.DefaultTimeout"/> when it is not set. Throws
+    /// <see cref="InvalidOperationException"/> for a value that is not a time span from one second to 24 hours.
+    /// </summary>
+    public TimeSpan DrainTimeoutValue()
+    {
+        if (DrainTimeout is null)
+            return TraxDrain.DefaultTimeout;
+        try
+        {
+            return TraxDrain.ParseTimeout(DrainTimeout, nameof(DrainTimeout));
+        }
+        catch (ArgumentException ex)
+        {
+            throw new InvalidOperationException(
+                $"drainTimeout '{DrainTimeout}' is not a time span from 00:00:01 to 1.00:00:00. Write it as hours, "
+                    + "minutes and seconds, as in \"00:10:00\" for ten minutes.",
+                ex
+            );
+        }
+    }
 
     /// <summary>A value for each name the file lists under <c>settings</c>.</summary>
     public SortedDictionary<string, string> Settings { get; set; } = new(StringComparer.Ordinal);

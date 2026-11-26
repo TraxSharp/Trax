@@ -53,13 +53,20 @@ public static class TraxMigrate
     internal static bool ShouldMigrate(
         TraxEffectBuilder.TraxEffectBuilder builder,
         bool? requested = null,
-        string? variable = null
+        string? variable = null,
+        bool? drains = null
     )
     {
         var skip = SkipRequested(variable ?? Environment.GetEnvironmentVariable(Variable));
 
         if (requested ?? Requested)
         {
+            if (drains ?? TraxDrain.Requested)
+                throw new InvalidOperationException(
+                    $"This process was started with {Argument} and with {TraxDrain.Argument} or "
+                        + $"{TraxDrain.ResumeArgument}. Run each as a process of its own: the migration first, then "
+                        + "the drain."
+                );
             if (builder.MigrationsDisabled)
                 throw new InvalidOperationException(
                     $"This process was started with {Argument}, but its code calls SkipMigrations(), which says this "
@@ -72,6 +79,10 @@ public static class TraxMigrate
             );
             return true;
         }
+
+        // A process that sets or ends the drain never changes the schema: the deploy migrates before it drains.
+        if (drains ?? TraxDrain.Requested)
+            return false;
 
         return !builder.MigrationsDisabled && !skip;
     }

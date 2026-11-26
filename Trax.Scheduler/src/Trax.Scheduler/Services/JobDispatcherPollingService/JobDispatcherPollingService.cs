@@ -2,7 +2,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Functional;
+using Trax.Effect.Services.ChangeSignal;
 using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Services.Drain;
 using Trax.Scheduler.Services.SchedulerLiveness;
 using Trax.Scheduler.Trains.JobDispatcher;
 using Trax.Scheduler.Utilities;
@@ -38,6 +40,9 @@ internal sealed class JobDispatcherPollingService(
 
     // When the last cycle started, as a timestamp of the clock.
     private long _cycleStarted;
+
+    // Whether the last cycle found the hosts drained; null before the first.
+    private bool? _drained;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -105,12 +110,48 @@ internal sealed class JobDispatcherPollingService(
         return true;
     }
 
+    /// <summary>
+    /// Sends the scheduler change signal when the drain this cycle read differs from the last
+    /// cycle's. A drain set or ended in another process (a deploy's drain or resume) and one that
+    /// lapses send nothing themselves; the console's Drained mark learns of them this way.
+    /// </summary>
+    private void SignalDrainChange(bool drained)
+    {
+        if (_drained is { } was && was != drained)
+            serviceProvider.GetService<ITraxChangeSignal>()?.Notify(ChangeDomain.SchedulerConfig);
+        _drained = drained;
+    }
+
+    /// <summary>
+    /// Reads the drain while dispatch is paused, so the console's Drained mark still follows a
+    /// drain set, ended or lapsed meanwhile. A failed read is only logged: a paused dispatcher
+    /// reports "paused", not a failed cycle.
+    /// </summary>
+    private async Task SignalDrainWhilePausedAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var scope = serviceProvider.CreateAsyncScope();
+            await using var scopeDisposal = scope.ConfigureAwait(false);
+            SignalDrainChange(
+                await SchedulerDrain
+                    .IsDrainedAsync(scope.ServiceProvider, cancellationToken)
+                    .ConfigureAwait(false)
+            );
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger.LogDebug(ex, "The drain could not be read while the JobDispatcher is paused");
+        }
+    }
+
     private async Task RunJobDispatcher(CancellationToken cancellationToken)
     {
         _cycleStarted = Clock.GetTimestamp();
 
         if (!configuration.JobDispatcherEnabled)
         {
+            await SignalDrainWhilePausedAsync(cancellationToken).ConfigureAwait(false);
             // The loop is alive and doing what it was told; stamping it means re-enabling the
             // dispatcher does not start from a stale timestamp. The health check reports "paused".
             livenessMonitor.RecordDispatchCycle();
@@ -122,6 +163,20 @@ internal sealed class JobDispatcherPollingService(
         {
             var scope = serviceProvider.CreateAsyncScope();
             await using var scopeDisposal = scope.ConfigureAwait(false);
+
+            // A drain stops every host dispatching (Trax.Docs/adr/0065). The loop stays alive and
+            // stamped, as when the dispatcher is switched off, so the health check stays green.
+            var drained = await SchedulerDrain
+                .IsDrainedAsync(scope.ServiceProvider, cancellationToken)
+                .ConfigureAwait(false);
+            SignalDrainChange(drained);
+            if (drained)
+            {
+                livenessMonitor.RecordDispatchCycle();
+                logger.LogDebug("Drained: the JobDispatcher dispatches nothing this cycle");
+                return;
+            }
+
             var train = scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
 
             logger.LogDebug("JobDispatcher polling cycle starting");

@@ -1,0 +1,86 @@
+namespace Trax.Scheduler.Sandbox.Launcher.Configuration
+{
+    public sealed class KubernetesBackendOptions
+    {
+        public KubernetesBackendOptions() { }
+        public string CollectorImage { get; set; }
+        public string Namespace { get; set; }
+        public string NodeName { get; set; }
+        public string OutputStorageClassName { get; set; }
+        public System.TimeSpan PollInterval { get; set; }
+        public string RunsClaimName { get; set; }
+        public int RunsMinFreePercent { get; set; }
+        public string RunsPath { get; set; }
+        public string RuntimeClassName { get; set; }
+    }
+    public sealed class PodmanBackendOptions
+    {
+        public PodmanBackendOptions() { }
+        public System.Collections.Generic.IList<string> HolderCommand { get; }
+        public string HolderImage { get; set; }
+        public string SocketPath { get; set; }
+    }
+    public enum SandboxBackendKind
+    {
+        Podman = 0,
+        Kubernetes = 1,
+    }
+    public sealed class SandboxCaps
+    {
+        public SandboxCaps() { }
+        public long MaxArchiveBytes { get; set; }
+        public int MaxArchiveFiles { get; set; }
+        public int MaxConcurrent { get; set; }
+        public int MaxCpuMillicores { get; set; }
+        public int MaxDiskMiB { get; set; }
+        public int MaxInputBytes { get; set; }
+        public int MaxMemoryMiB { get; set; }
+        public int MaxPids { get; set; }
+        public int MaxResultBytes { get; set; }
+        public int MaxTimeoutSeconds { get; set; }
+    }
+    public sealed class SandboxLauncherOptions
+    {
+        public const string Section = "Trax:SandboxLauncher";
+        public SandboxLauncherOptions() { }
+        public Trax.Scheduler.Sandbox.Launcher.Configuration.SandboxBackendKind Backend { get; set; }
+        public System.Collections.Generic.IList<string> CanaryProbes { get; }
+        public Trax.Scheduler.Sandbox.Launcher.Configuration.SandboxCaps Caps { get; }
+        public Trax.Scheduler.Sandbox.Launcher.Configuration.KubernetesBackendOptions Kubernetes { get; }
+        public System.IO.UnixFileMode ListenSocketMode { get; set; }
+        public string? ListenSocketPath { get; set; }
+        public string? ListenUrl { get; set; }
+        public Trax.Scheduler.Sandbox.Launcher.Configuration.PodmanBackendOptions Podman { get; }
+        public System.Collections.Generic.IDictionary<string, Trax.Scheduler.Sandbox.Launcher.Configuration.SandboxProfile> Profiles { get; }
+        public Trax.Scheduler.Sandbox.Launcher.Configuration.SandboxRuntime Runtime { get; set; }
+        public byte[]? SigningKey { get; set; }
+        public void Validate() { }
+        public static Trax.Scheduler.Sandbox.Launcher.Configuration.SandboxLauncherOptions Read(Microsoft.Extensions.Configuration.IConfiguration configuration) { }
+    }
+    public sealed class SandboxProfile
+    {
+        public SandboxProfile() { }
+        public System.Collections.Generic.IList<string> Command { get; }
+        public string Image { get; set; }
+        public string User { get; set; }
+    }
+    public enum SandboxRuntime
+    {
+        Kata = 0,
+        GVisor = 1,
+    }
+}
+namespace Trax.Scheduler.Sandbox.Launcher
+{
+    public static class KubernetesSandboxManifests
+    {
+        public const string KeySecretName = "trax-sandbox-launcher-key";
+        public const string LauncherName = "trax-sandbox-launcher";
+        public static string Render(Trax.Scheduler.Sandbox.Launcher.Configuration.SandboxLauncherOptions options, string launcherImage, string hubNamespace, string runsStorage = "20Gi") { }
+    }
+    public static class TraxSandboxLauncher
+    {
+        public static Microsoft.AspNetCore.Builder.WebApplication Build(string[] args) { }
+        public static System.Threading.Tasks.Task RunAsync(string[] args, System.Threading.CancellationToken ct = default) { }
+    }
+}

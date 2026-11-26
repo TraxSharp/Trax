@@ -1,6 +1,6 @@
 ---
 title: "operations.config mutations"
-description: "Reference for the operations.config mutation namespace: updateScheduler, setLogLevels, and how saved scheduler settings are stored and applied."
+description: "Reference for the operations.config mutations: updateScheduler, setLogLevels, drain and resume, and how saved scheduler settings are stored and applied."
 type: reference
 area: api
 surface: graphql
@@ -71,6 +71,53 @@ mutation {
 **Returns**: `SetLogLevelsResponse` with `success: Boolean!`, `count: Int!` (categories set), `notApplied: [String!]!` and `message: String!`. A list naming a category that is not configured, or an empty list, is refused whole and nothing changes. `notApplied` lists categories set whose loggers still filter at another level, which happens when the host sets the logger filter itself after Trax.
 
 The change is applied to the host's logger filter options over every configuration source and lasts until the process restarts; nothing is persisted, and it does not reach the scheduler or worker processes. A host that does not call `AddScheduler` registers no `ILogLevelService`, and there `setLogLevels` returns `success: false`.
+
+## drain
+
+Drains every host sharing the database: no host dispatches, queues a scheduled run or claims a job
+until the drain lapses or [`resume`](#resume) ends it. Work already running carries on. A schedule
+that comes due meanwhile is a misfire once the drain ends, and its manifest's misfire policy decides
+whether it runs then. A drain replaces one in force, and records the caller (its Trax principal id,
+else the name it signed in with) as who set it. The console's **Drain** calls the same
+`IOperationsService.DrainAsync`. A scheduler host that starts while drained leaves the drain in place and fails no
+run at startup. See
+[TraxDrain](/docs/sdk-reference/configuration/trax-drain) for how a deploy drains before it replaces
+the hosts.
+
+```graphql
+mutation {
+  operations {
+    config {
+      drain(minutes: 30) { success count message }
+    }
+  }
+}
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `minutes` | `Int` | No | How long the drain lasts, 1 to 1440. 20 when omitted, a deploy's default timeout plus its margin |
+
+**Returns**: [`OperationResponse`](/docs/sdk-reference/graphql-api/mutations/operation-response), with `count: 1` once set. A
+length outside 1 to 1440 minutes returns `success: false` and changes nothing.
+
+## resume
+
+Ends the drain, whoever set it, so every host takes work again within a polling cycle. The console's
+**Resume** calls the same `IOperationsService.EndDrainAsync`.
+
+```graphql
+mutation {
+  operations {
+    config {
+      resume { success count message }
+    }
+  }
+}
+```
+
+**Returns**: [`OperationResponse`](/docs/sdk-reference/graphql-api/mutations/operation-response) with `success: true`, and `count: 1`
+when a drain was in force or `count: 0` when none was.
 
 ## UpdateSchedulerConfigInput fields
 

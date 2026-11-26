@@ -336,6 +336,25 @@ public class AdminEndpointStressTests : StressTestSetup
 
     #endregion
 
+    [Test]
+    public async Task Drain_AtScale_WithinBudget()
+    {
+        // The drain's read counts the live runs among millions, with the queued jobs and the
+        // machine instances, and lists the first fifty: what the console's scheduler page shows.
+        await MeasureAsync(
+            "operations.config.drain",
+            ListBudget,
+            async (sp, ct) =>
+            {
+                var status = await new ConfigQueries()
+                    .GetDrain(Operations(sp), ct)
+                    .ConfigureAwait(false);
+                status.Busy.Count.Should().BeLessThanOrEqualTo(50);
+                status.BusyTotal.Should().BeGreaterThanOrEqualTo(status.Busy.Count);
+            }
+        );
+    }
+
     #region Executions (metadata) — pagination
 
     [Test]

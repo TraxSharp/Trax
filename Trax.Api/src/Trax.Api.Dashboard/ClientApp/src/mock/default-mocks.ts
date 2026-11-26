@@ -19,4 +19,6 @@ export const defaultMocks: IMocks = {
   // The mock is a host that serves persisted-operation management to its caller; a scenario that
   // is not overrides it (scenarios.ts, persistedOperationsUnavailable).
   ConfigQueries: () => ({ canManagePersistedOperations: true }),
+  // No drain, nothing busy: a drain is a state an operator or a deploy sets, never a mock's chance.
+  DrainStatus: () => ({ drained: false, until: null, startedAt: null, startedBy: null, busy: [], busyTotal: 0 }),
 };

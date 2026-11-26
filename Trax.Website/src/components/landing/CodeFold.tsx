@@ -9,18 +9,23 @@ import { HUE, NEUTRAL, alpha } from "@/lib/hue";
 // `pulse` is anything that changes when what is inside changes, such as the demo's step. While the fold is closed,
 // each change tints its bar for a moment in `color`, the colour the demo gives that moment, so a reader can see the
 // code is moving with the run without the bar flashing at them.
+//
+// `lazy` draws what is inside only once the fold is first opened, for content too heavy to load with the page.
 export default function CodeFold({
   label,
   pulse,
   color = HUE.green,
+  lazy = false,
   children,
 }: {
   label: string;
   pulse?: unknown;
   color?: string;
+  lazy?: boolean;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const [opened, setOpened] = useState(false);
   // Counts the changes seen, and the last one whose light has gone out. Pass a string or a number: an object made
   // afresh on every render would count as a change each time.
   const [seen, setSeen] = useState({ pulse, count: 0 });
@@ -36,7 +41,11 @@ export default function CodeFold({
 
   return (
     <details
-      onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}
+      onToggle={(e) => {
+        const now = (e.currentTarget as HTMLDetailsElement).open;
+        setOpen(now);
+        if (now) setOpened(true);
+      }}
       className="group rounded-lg border border-border bg-bg-secondary text-sm transition-colors duration-500"
       style={{ borderColor: showing ? alpha(color, 35) : undefined }}
     >
@@ -58,7 +67,7 @@ export default function CodeFold({
           &rsaquo;
         </span>
       </summary>
-      <div className="border-t border-border p-3">{children}</div>
+      <div className="border-t border-border p-3">{!lazy || opened ? children : null}</div>
     </details>
   );
 }

@@ -830,6 +830,50 @@ const readSchedulerConfig: QueryOverlay = (data, store) => {
   return patchObjectAtPath(data, "operations.config.scheduler", patch);
 };
 
+// ── Drain ──────────────────────────────────────────────────────────────────
+// DrainHosts / ResumeHosts -> Drain (operations.config.drain). The busy list is the base read's;
+// the mock host runs nothing that a drain would change.
+
+const DRAIN_KEY = "drain";
+
+const drainHosts: MutationOverlay = (variables, store) => {
+  const minutes = variables.minutes == null ? 20 : Number(variables.minutes);
+  if (!Number.isInteger(minutes) || minutes < 1 || minutes > 1440)
+    return wrap("operations.config.drain", {
+      success: false,
+      count: null,
+      message: "Not drained: a drain lasts from 1 minute to 24 hours.",
+    });
+  const startedAt = nowIso();
+  const until = new Date(Date.parse(startedAt) + minutes * 60_000).toISOString();
+  store.update("DrainHosts", (draft) => {
+    draft[DRAIN_KEY] = { drained: true, until, startedAt, startedBy: "apikey:admin" };
+  });
+  return wrap("operations.config.drain", {
+    success: true,
+    count: 1,
+    message: `Drained until ${until.replace("T", " ").slice(0, 19)}Z: no host dispatches, queues a scheduled run or claims a job until then or until it is resumed. Running work carries on.`,
+  });
+};
+
+const resumeHosts: MutationOverlay = (_variables, store) => {
+  const held = readDelta<Rec>(store, DRAIN_KEY, {}).drained === true;
+  store.update("ResumeHosts", (draft) => {
+    draft[DRAIN_KEY] = { drained: false, until: null, startedAt: null, startedBy: null };
+  });
+  return wrap("operations.config.resume", {
+    success: true,
+    count: held ? 1 : 0,
+    message: held ? "Resumed: every host takes work again." : "No drain was in force; nothing changed.",
+  });
+};
+
+const readDrain: QueryOverlay = (data, store) => {
+  const patch = readDelta<Rec>(store, DRAIN_KEY, {});
+  if (Object.keys(patch).length === 0) return data;
+  return patchObjectAtPath(data, "operations.config.drain", patch);
+};
+
 // ── Effects ────────────────────────────────────────────────────────────────
 // SetEffectEnabled -> Effects (enabled, by fullName).
 
@@ -1478,8 +1522,13 @@ export const groupOverlay: StatefulOverlay = {
 };
 
 export const schedulerOverlay: StatefulOverlay = {
-  mutations: { UpdateScheduler: updateScheduler, SetLogLevels: setLogLevels },
-  queries: { SchedulerConfig: readSchedulerConfig, LogLevels: readLogLevels },
+  mutations: {
+    UpdateScheduler: updateScheduler,
+    SetLogLevels: setLogLevels,
+    DrainHosts: drainHosts,
+    ResumeHosts: resumeHosts,
+  },
+  queries: { SchedulerConfig: readSchedulerConfig, LogLevels: readLogLevels, Drain: readDrain },
 };
 
 export const effectOverlay: StatefulOverlay = {

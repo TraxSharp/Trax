@@ -1,0 +1,62 @@
+{
+  "version": 2,
+  "app": "energyhub",
+  "services": {
+    "hub": {
+      "project": "Trax.Samples.EnergyHub.Hub/Trax.Samples.EnergyHub.Hub.csproj",
+      "port": 5202,
+      "memory": 512,
+      "cpus": 1,
+      "egress": []
+    },
+    "worker": {
+      "project": "Trax.Samples.EnergyHub.Worker/Trax.Samples.EnergyHub.Worker.csproj",
+      "count": 2,
+      "memory": 384,
+      "cpus": 0.5,
+      "egress": []
+    }
+  },
+  "connectionStrings": { "trax": "TraxDatabase", "rabbitMq": "RabbitMQ" },
+  "settings": ["Broadcast__AllowInsecureTransport"],
+  "secrets": ["Trax__BroadcastSigningKey"],
+  "environments": {
+    "cluster": {
+      "target": "kubernetes",
+      "profile": "try",
+      "registry": "localhost:5001",
+      "database": { "inCluster": true },
+      "limits": {
+        "database": { "memory": 768, "cpus": 1 },
+        "rabbitmq": { "memory": 512, "cpus": 0.5 }
+      },
+      "drainTimeout": "00:05:00",
+      "settings": { "Broadcast__AllowInsecureTransport": "true" }
+    },
+    "home": {
+      "target": "kubernetes",
+      "runtime": "podman",
+      "profile": "try",
+      "database": { "inCluster": true },
+      "limits": {
+        "database": { "memory": 768, "cpus": 1 },
+        "rabbitmq": { "memory": 512, "cpus": 0.5 }
+      },
+      "drainTimeout": "00:05:00",
+      "settings": { "Broadcast__AllowInsecureTransport": "true" }
+    },
+    "production": {
+      "target": "kubernetes",
+      "profile": "try",
+      "namespace": "energyhub",
+      "registry": "ghcr.io/example-org",
+      "database": { "secret": "energyhub-db", "key": "connection" },
+      "counts": { "worker": 3 },
+      "limits": { "rabbitmq": { "memory": 512, "cpus": 0.5 } },
+      "drainTimeout": "00:20:00",
+      "exposure": "tailnet",
+      "tailnet": { "hostname": "energyhub" },
+      "settings": { "Broadcast__AllowInsecureTransport": "true" }
+    }
+  }
+}

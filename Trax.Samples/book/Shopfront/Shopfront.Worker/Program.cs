@@ -17,9 +17,6 @@ var builder = WebApplication.CreateBuilder(args);
 var connectionString =
     builder.Configuration.GetConnectionString("Shopfront")
     ?? throw new InvalidOperationException("ConnectionStrings:Shopfront is not set.");
-var rabbitMq =
-    builder.Configuration.GetConnectionString("RabbitMq")
-    ?? throw new InvalidOperationException("ConnectionStrings:RabbitMq is not set.");
 
 // The key the hub and the workers sign their events with. A process drops any event not signed
 // with it. appsettings.Development.json holds a key printed in the book, for Development only.
@@ -37,18 +34,19 @@ builder.Services.AddTrax(trax =>
     trax.AddEffects(effects =>
             effects
                 .UsePostgres(connectionString)
-                // The runs this worker executes reach the hub's subscriptions over RabbitMQ.
+                // The runs this worker executes reach the hub's subscriptions over RabbitMQ, read
+                // from configuration as the hub reads it.
                 .UseBroadcaster(broadcaster =>
                     broadcaster.UseRabbitMq(
-                        rabbitMq,
+                        builder.Configuration,
                         rabbit =>
                         {
                             rabbit.SigningKey = broadcastKey;
-                            // Set by compose.yaml, whose broker is reached by name on its own
-                            // network. A broker anywhere else is reached over amqps://.
-                            rabbit.AllowInsecureTransport = builder.Configuration.GetValue(
-                                "Broadcast:AllowInsecureTransport",
-                                defaultValue: false
+                            // As on the hub: plain amqp:// only where the deployment says so.
+                            rabbit.AllowInsecureTransport = string.Equals(
+                                builder.Configuration["Broadcast:AllowInsecureTransport"],
+                                "true",
+                                StringComparison.OrdinalIgnoreCase
                             );
                         }
                     )
@@ -74,4 +72,6 @@ builder.Services.AddHealthChecks();
 
 var app = builder.Build();
 app.MapHealthChecks("/health/live");
-await app.RunAsync().ConfigureAwait(false);
+
+// Serves; or reports what the worker needs from its deployment (--trax-export-deploy) and exits.
+await app.RunTraxAsync(args).ConfigureAwait(false);

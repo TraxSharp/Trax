@@ -49,11 +49,16 @@ public class KubernetesDeployerTests
                 "secret orders-staging",
                 "create-namespace orders-staging",
                 "list",
+                "apply NetworkPolicy/orders-deny",
+                "apply NetworkPolicy/orders-within",
                 "apply Service/database",
                 "apply StatefulSet/database",
                 "wait StatefulSet/database",
                 "create-job orders-migrate-20261117-120000-abc",
                 "wait-job orders-migrate-20261117-120000-abc",
+                "read-deployment hub",
+                "read-deployment reports",
+                "read-deployment worker",
                 "apply Service/hub",
                 "apply Deployment/hub",
                 "apply Deployment/reports",
@@ -243,6 +248,153 @@ public class KubernetesDeployerTests
         cluster.Calls.Should().NotContain("wait Deployment/reports");
     }
 
+    internal static V1Deployment Running(string name, string image) =>
+        new()
+        {
+            ApiVersion = "apps/v1",
+            Kind = "Deployment",
+            Metadata = new V1ObjectMeta
+            {
+                Name = name,
+                NamespaceProperty = "orders-staging",
+                Uid = "uid-" + name,
+                ResourceVersion = "41",
+                Labels = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["trax/app"] = "orders",
+                },
+            },
+            Spec = new V1DeploymentSpec
+            {
+                Replicas = 1,
+                Template = new V1PodTemplateSpec
+                {
+                    Spec = new V1PodSpec
+                    {
+                        Containers = [new V1Container { Name = name, Image = image }],
+                    },
+                },
+            },
+            Status = new V1DeploymentStatus { Replicas = 1 },
+        };
+
+    [Test]
+    public async Task A_failed_rollout_puts_every_service_back_on_the_version_it_ran_before()
+    {
+        var (deployer, cluster, _) = Deployer();
+        cluster.SecretKeys = ["POSTGRES_PASSWORD", "Stripe__ApiKey"];
+        cluster.Deployments["hub"] = Running("hub", "orders-hub:old");
+        cluster.Deployments["worker"] = Running("worker", "orders-worker:old");
+        cluster.FailRollout = "Deployment/worker";
+
+        var act = () => Deploy(deployer);
+
+        (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
+            "Deployment worker did not roll out*Every service was rolled back to the version it ran before this "
+                + "deploy; the migration stays."
+        );
+        var rollback = cluster
+            .Calls.SkipWhile(c =>
+                !string.Equals(c, "wait Deployment/worker", StringComparison.Ordinal)
+            )
+            .Skip(1)
+            .ToList();
+        rollback
+            .Should()
+            .Equal([
+                "apply Deployment/hub",
+                "delete Deployment/reports",
+                "apply Deployment/worker",
+                "wait Deployment/hub",
+                "wait Deployment/worker",
+                "create-job orders-resume-20261117-120000-abc",
+                "wait-job orders-resume-20261117-120000-abc",
+            ]);
+        var restoredWorker = cluster
+            .Applied.OfType<V1Deployment>()
+            .Last(d => string.Equals(d.Metadata.Name, "worker", StringComparison.Ordinal));
+        restoredWorker
+            .Spec.Template.Spec.Containers.Single()
+            .Image.Should()
+            .Be("orders-worker:old");
+    }
+
+    [Test]
+    public async Task A_failed_first_rollout_is_left_as_it_is()
+    {
+        var (deployer, cluster, _) = Deployer();
+        cluster.SecretKeys = ["POSTGRES_PASSWORD", "Stripe__ApiKey"];
+        cluster.FailRollout = "Deployment/hub";
+
+        var act = () => Deploy(deployer);
+
+        (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
+            "Deployment hub did not roll out*Nothing was rolled back: no service ran before this deploy.*"
+        );
+        cluster.Calls.Should().NotContain(c => c.StartsWith("delete", StringComparison.Ordinal));
+    }
+
+    [Test]
+    public async Task A_rollback_that_fails_says_the_services_are_between_versions()
+    {
+        var (deployer, cluster, _) = Deployer();
+        cluster.SecretKeys = ["POSTGRES_PASSWORD", "Stripe__ApiKey"];
+        cluster.Deployments["hub"] = Running("hub", "orders-hub:old");
+        cluster.FailEveryRollout = "Deployment/hub";
+
+        var act = () => Deploy(deployer);
+
+        (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
+            "Deployment hub did not roll out*Rolling back failed too, so the services are in between versions:*"
+        );
+    }
+
+    [Test]
+    public async Task A_cancelled_deploy_is_not_rolled_back()
+    {
+        var (deployer, cluster, _) = Deployer();
+        cluster.SecretKeys = ["POSTGRES_PASSWORD", "Stripe__ApiKey"];
+        cluster.Deployments["hub"] = Running("hub", "orders-hub:old");
+        using var cancel = new CancellationTokenSource();
+        cluster.OnWait = async name =>
+        {
+            if (string.Equals(name, "Deployment/hub", StringComparison.Ordinal))
+                await cancel.CancelAsync().ConfigureAwait(false);
+        };
+        cluster.FailRollout = "Deployment/hub";
+
+        var act = () =>
+            deployer.DeployAsync(
+                DeployKubernetesTests.File_(),
+                "/src/trax.deploy.json",
+                "staging",
+                DeployKubernetesTests.Exports(),
+                Tag,
+                cancel.Token
+            );
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        cluster
+            .Calls.Count(c => string.Equals(c, "apply Deployment/hub", StringComparison.Ordinal))
+            .Should()
+            .Be(1, "a cancelled deploy stops where it is");
+    }
+
+    [Test]
+    public void A_restored_deployment_carries_its_spec_and_none_of_the_server_set_fields()
+    {
+        var restored = KubernetesDeployer.Restored(
+            "orders-staging",
+            Running("hub", "orders-hub:old")
+        );
+
+        restored.Metadata.Uid.Should().BeNull();
+        restored.Metadata.ResourceVersion.Should().BeNull();
+        restored.Status.Should().BeNull();
+        restored.Metadata.Labels["trax/app"].Should().Be("orders");
+        restored.Spec.Template.Spec.Containers.Single().Image.Should().Be("orders-hub:old");
+    }
+
     [TestCase(false)]
     [TestCase(true)]
     public async Task Destroy_keeps_the_database_volume_unless_asked(bool deleteData)
@@ -313,10 +465,37 @@ public class KubernetesDeployerTests
 
         public List<KubernetesObjectState> Existing { get; } = [];
 
+        /// <summary>Called with kind/name at the start of every rollout wait.</summary>
+        public Func<string, Task>? OnWait { get; set; }
+
+        private readonly Dictionary<string, int> _waits = new(StringComparer.Ordinal);
+
         public KubernetesJobResult Job { get; set; } = new(Succeeded: true, Reason: null, "");
 
-        /// <summary>The kind/name whose rollout times out, as the real client reports it.</summary>
+        /// <summary>The result of each Job whose name holds the key, over <see cref="Job"/>: "-drain-", "-resume-".</summary>
+        public Dictionary<string, KubernetesJobResult> JobResults { get; } =
+            new(StringComparer.Ordinal);
+
+        /// <summary>Every Job created, in order.</summary>
+        public List<V1Job> Jobs { get; } = [];
+
+        /// <summary>How long each Job was waited for, by name.</summary>
+        public Dictionary<string, TimeSpan> JobTimeouts { get; } = new(StringComparer.Ordinal);
+
+        /// <summary>
+        /// The kind/name whose rollout times out, as the real client reports it. Only its first wait fails, so a
+        /// rollback of it rolls out.
+        /// </summary>
         public string? FailRollout { get; set; }
+
+        /// <summary>The kind/name whose rollout fails every time, a rollback's included.</summary>
+        public string? FailEveryRollout { get; set; }
+
+        /// <summary>The Deployments the cluster holds before the deploy, by name.</summary>
+        public Dictionary<string, V1Deployment> Deployments { get; } = new(StringComparer.Ordinal);
+
+        /// <summary>Every body applied, in order.</summary>
+        public List<IKubernetesObject<V1ObjectMeta>> Applied { get; } = [];
 
         public List<KubernetesWorkloadState> Workloads { get; } = [];
 
@@ -355,21 +534,72 @@ public class KubernetesDeployerTests
             return Task.FromResult<IReadOnlyCollection<string>?>(SecretKeys);
         }
 
+        /// <summary>The labels of each Secret by name, for the ones whose labels are read.</summary>
+        public Dictionary<string, Dictionary<string, string>> SecretLabels { get; } =
+            new(StringComparer.Ordinal);
+
+        public Task<IReadOnlyDictionary<string, string>?> SecretLabelsAsync(
+            string ns,
+            string name,
+            CancellationToken ct
+        )
+        {
+            Calls.Add($"secret-labels {name}");
+            return Task.FromResult<IReadOnlyDictionary<string, string>?>(
+                SecretLabels.GetValueOrDefault(name)
+            );
+        }
+
+        /// <summary>The value of each tailnet proxy Secret by name, as an earlier deploy wrote it.</summary>
+        public Dictionary<string, string> ProxySecrets { get; } = new(StringComparer.Ordinal);
+
+        public Task<string?> ProxySecretAsync(string ns, string name, CancellationToken ct)
+        {
+            Calls.Add($"read-proxy-secret {name}");
+            return Task.FromResult(ProxySecrets.GetValueOrDefault(name));
+        }
+
         public Task<IReadOnlyList<KubernetesObjectState>> ListAsync(string ns, CancellationToken ct)
         {
             Calls.Add("list");
             return Task.FromResult<IReadOnlyList<KubernetesObjectState>>(Existing);
         }
 
+        /// <summary>The cluster-wide objects the cluster holds, by kind/name.</summary>
+        public Dictionary<string, KubernetesObjectState> ClusterObjects { get; } =
+            new(StringComparer.Ordinal);
+
+        public Task<KubernetesObjectState?> ClusterObjectAsync(
+            string kind,
+            string name,
+            CancellationToken ct
+        ) => Task.FromResult(ClusterObjects.GetValueOrDefault($"{kind}/{name}"));
+
+        /// <summary>Called with each object before it is applied; throws to stand for the API refusing it.</summary>
+        public Action<IKubernetesObject<V1ObjectMeta>>? OnApply { get; set; }
+
         public Task ApplyAsync(IKubernetesObject<V1ObjectMeta> body, CancellationToken ct)
         {
+            OnApply?.Invoke(body);
             Calls.Add($"apply {body.Kind}/{body.Metadata.Name}");
+            Applied.Add(body);
             return Task.CompletedTask;
         }
 
+        public Task<V1Deployment?> ReadDeploymentAsync(string ns, string name, CancellationToken ct)
+        {
+            Calls.Add($"read-deployment {name}");
+            return Task.FromResult(Deployments.GetValueOrDefault(name));
+        }
+
+        /// <summary>Called with each Job before it is created; throws to stand for the API refusing it.</summary>
+        public Action<V1Job>? OnCreateJob { get; set; }
+
         public Task CreateJobAsync(V1Job body, CancellationToken ct)
         {
+            OnCreateJob?.Invoke(body);
             Calls.Add($"create-job {body.Metadata.Name}");
+            Jobs.Add(body);
             return Task.CompletedTask;
         }
 
@@ -381,10 +611,15 @@ public class KubernetesDeployerTests
         )
         {
             Calls.Add($"wait-job {name}");
-            return Task.FromResult(Job);
+            JobTimeouts[name] = timeout;
+            var result = JobResults
+                .Where(r => name.Contains(r.Key, StringComparison.Ordinal))
+                .Select(r => r.Value)
+                .FirstOrDefault();
+            return Task.FromResult(result ?? Job);
         }
 
-        public Task WaitForRolloutAsync(
+        public async Task WaitForRolloutAsync(
             string ns,
             string kind,
             string name,
@@ -392,14 +627,17 @@ public class KubernetesDeployerTests
             CancellationToken ct
         )
         {
-            Calls.Add($"wait {kind}/{name}");
-            return string.Equals(FailRollout, $"{kind}/{name}", StringComparison.Ordinal)
-                ? Task.FromException(
-                    new InvalidOperationException(
-                        $"{kind} {name} did not roll out within 10 minutes"
-                    )
-                )
-                : Task.CompletedTask;
+            var target = $"{kind}/{name}";
+            Calls.Add($"wait {target}");
+            if (OnWait is not null)
+                await OnWait(target).ConfigureAwait(false);
+            _waits[target] = _waits.GetValueOrDefault(target) + 1;
+            var failOnce =
+                string.Equals(FailRollout, target, StringComparison.Ordinal) && _waits[target] == 1;
+            if (failOnce || string.Equals(FailEveryRollout, target, StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    $"{kind} {name} did not roll out within 10 minutes"
+                );
         }
 
         public Task<IReadOnlyList<KubernetesWorkloadState>> WorkloadsAsync(

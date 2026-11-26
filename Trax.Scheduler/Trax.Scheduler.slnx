@@ -4,6 +4,7 @@
     <Project Path="src/Trax.Scheduler.Sqs/Trax.Scheduler.Sqs.csproj" />
     <Project Path="src/Trax.Scheduler.Lambda/Trax.Scheduler.Lambda.csproj" />
     <Project Path="src/Trax.Runner.Lambda/Trax.Runner.Lambda.csproj" />
+    <Project Path="src/Trax.Scheduler.Sandbox.Launcher/Trax.Scheduler.Sandbox.Launcher.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Trax.Scheduler.Tests/Trax.Scheduler.Tests.csproj" />
@@ -12,5 +13,8 @@
     <Project Path="tests/Trax.Scheduler.Tests.Sqlite.Integration/Trax.Scheduler.Tests.Sqlite.Integration.csproj" />
     <Project Path="tests/Trax.Scheduler.Tests.Meta/Trax.Scheduler.Tests.Meta.csproj" />
     <Project Path="tests/Trax.Scheduler.Tests.Stress/Trax.Scheduler.Tests.Stress.csproj" />
+    <Project Path="tests/Trax.Scheduler.Sandbox.Image/Trax.Scheduler.Sandbox.Image.csproj" />
+    <Project Path="tests/Trax.Scheduler.Sandbox.LauncherHost/Trax.Scheduler.Sandbox.LauncherHost.csproj" />
+    <Project Path="tests/Trax.Scheduler.Sandbox.Tests/Trax.Scheduler.Sandbox.Tests.csproj" />
   </Folder>
 </Solution>

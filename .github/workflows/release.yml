@@ -18,8 +18,10 @@ name: Release
 # 2FA, while the publish job waits (see the "Stage on npm and wait for approval" step).
 #
 # Jobs, in order: build-test (CI, read-only) -> release (tags; the only write token) ->
-# build (packs from the tag, read-only) -> publish (verifies, attests, publishes). Publishing the
-# site is not part of a release: dispatch website.yml with the new tag afterwards.
+# build (packs from the tag and builds the egress image, read-only) -> push-egress (the egress
+# image to ghcr.io; the only packages token) -> publish (verifies, attests, publishes; NuGet only
+# once the image is there). Publishing the site is not part of a release: dispatch website.yml with
+# the new tag afterwards.
 on:
   workflow_dispatch:
 
@@ -136,13 +138,17 @@ jobs:
   build:
     needs: release
     if: needs.release.outputs.released == 'true'
+    # ubuntu-latest, as ci.yml's egress job: on 24.04 a rootless podman 4.9 build cannot resolve names behind
+    # harden-runner, so the image's apk step fails. 26.04 ships qemu as qemu-user-binfmt.
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     permissions:
       contents: read
     outputs:
       digests: ${{ steps.digests.outputs.digests }}
       npm-digests: ${{ steps.npm-digests.outputs.digests }}
+      egress-digest: ${{ steps.egress.outputs.digest }}
+      egress-archive: ${{ steps.egress.outputs.archive }}
     steps:
       - name: Harden runner
         uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a  # v2.22.4
@@ -167,6 +173,24 @@ jobs:
             ts-crl.ws.symantec.com:80
             www.microsoft.com:80
             registry.npmjs.org:443
+            registry-1.docker.io:443
+            auth.docker.io:443
+            production.cloudflare.docker.com:443
+            production.cloudfront.docker.com:443
+            docker-images-prod.s3.dualstack.us-east-1.amazonaws.com:443
+            docker-images-prod.6aa30f8b08e16409b46e0173d6de2f56.r2.cloudflarestorage.com:443
+            dl-cdn.alpinelinux.org:443
+            azure.archive.ubuntu.com:80
+            azure.archive.ubuntu.com:443
+            *.ec2.archive.ubuntu.com:80
+            *.ec2.archive.ubuntu.com:443
+            archive.ubuntu.com:80
+            archive.ubuntu.com:443
+            security.ubuntu.com:80
+            security.ubuntu.com:443
+            esm.ubuntu.com:80
+            esm.ubuntu.com:443
+            packages.microsoft.com:443
       - name: Checkout the tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -206,6 +230,49 @@ jobs:
             echo "::error::Expected only traxsharp-state-machine-$PKG_VERSION.tgz, packed: $(ls ../../npm)"
             exit 1
           fi
+      - name: Install qemu for the arm64 build
+        # The arm64 half of the egress image runs its build steps under qemu. The Ubuntu archive hosts
+        # above are the ones apt-get update reaches on the runner.
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends qemu-user-binfmt
+      - name: Build the egress image
+        # ghcr.io/traxsharp/trax-egress, the image trax deploy renders beside a service that names
+        # "egress", built at the released version for linux/amd64 and linux/arm64 into one OCI index,
+        # saved as an OCI archive. The index's digest is packed into Trax.Cli below, so a trax of this
+        # version names exactly this image on either architecture, and nothing a tag could later point
+        # at. push-egress pushes the archive unchanged and checks the registry holds that digest before
+        # any NuGet package goes out.
+        id: egress
+        env:
+          PKG_VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          set -eu
+          image="localhost/trax-egress:$PKG_VERSION"
+          podman build --platform linux/amd64,linux/arm64 --manifest "$image" --build-arg VERSION="$PKG_VERSION" Trax.Egress
+          mkdir -p egress
+          podman manifest push --all --format oci "$image" oci-archive:egress/trax-egress.tar
+          # The digest is the sha256 of the index's bytes, as a registry serves it.
+          skopeo inspect --raw oci-archive:egress/trax-egress.tar > "$RUNNER_TEMP/egress-index.json"
+          if [ "$(jq -r '.mediaType' "$RUNNER_TEMP/egress-index.json")" != application/vnd.oci.image.index.v1+json ]; then
+            echo "::error::The egress archive does not hold an OCI image index."
+            exit 1
+          fi
+          platforms=$(jq -r '[.manifests[].platform | .os + "/" + .architecture] | sort | join(" ")' "$RUNNER_TEMP/egress-index.json")
+          if [ "$platforms" != "linux/amd64 linux/arm64" ]; then
+            echo "::error::The egress index holds '$platforms', not linux/amd64 and linux/arm64."
+            exit 1
+          fi
+          digest="sha256:$(sha256sum "$RUNNER_TEMP/egress-index.json" | cut -d ' ' -f 1)"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "archive=$(sha256sum egress/trax-egress.tar | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+      - name: Upload the egress image
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: egress
+          path: egress/trax-egress.tar
+          if-no-files-found: error
+          retention-days: 1
       - name: Install the API dashboard (locked, no install scripts)
         # Building Trax.Api.Dashboard compiles its React app with these packages and embeds it in
         # the assembly; packing refuses an assembly without it.
@@ -219,6 +286,8 @@ jobs:
           # Bind the version to env and reference the shell var (it is pipeline-
           # controlled, but this is the pattern to use for any ${{ }} value).
           PKG_VERSION: ${{ needs.release.outputs.version }}
+          # The egress image Trax.Cli names, by the digest built above. Only Trax.Cli reads it.
+          EGRESS_IMAGE: ghcr.io/traxsharp/trax-egress@${{ steps.egress.outputs.digest }}
         run: |
           jq -r '(.packages[] | select(.dotnet)
                   | .folder + "/" + (.dotnet["release-pack"] // (if .dotnet.pack then .dotnet.solution else empty end))),
@@ -227,7 +296,7 @@ jobs:
           while IFS= read -r project; do
             echo "::group::$project"
             dotnet restore "$project" --locked-mode
-            dotnet pack "$project" --configuration Release --no-restore --output nupkg -p:Version="$PKG_VERSION"
+            dotnet pack "$project" --configuration Release --no-restore --output nupkg -p:Version="$PKG_VERSION" -p:TraxEgressImage="$EGRESS_IMAGE"
             echo "::endgroup::"
           done < "$RUNNER_TEMP/pack-list"
 
@@ -263,13 +332,88 @@ jobs:
           retention-days: 1
 
   # ---------------------------------------------------------------------------
+  # Publish zone, for the egress image alone. The only job that may write packages, and it
+  # holds nothing else: no OIDC token, no attestation, no NuGet or npm credential. It runs
+  # before publish because the Trax.Cli package names the image by digest, so no trax of this
+  # version ships until the registry holds that digest. Gated behind the `release` environment.
+  # ---------------------------------------------------------------------------
+  push-egress:
+    needs: [release, build]
+    if: needs.release.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: release
+    permissions:
+      packages: write       # push the egress image to ghcr.io/traxsharp
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a  # v2.22.4
+        with:
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            release-assets.githubusercontent.com:443
+            objects.githubusercontent.com:443
+            ghcr.io:443
+            pkg-containers.githubusercontent.com:443
+      - name: Download the egress image
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          name: egress
+          path: egress
+      - name: Verify the egress image is the one build built
+        env:
+          EGRESS_ARCHIVE: ${{ needs.build.outputs.egress-archive }}
+        run: |
+          if [ "$(sha256sum egress/trax-egress.tar | cut -d ' ' -f 1)" != "$EGRESS_ARCHIVE" ]; then
+            echo "::error::The downloaded egress image is not the archive the build job built."
+            exit 1
+          fi
+      # skopeo pushes the archive as it is, every platform in its index (--preserve-digests refuses any
+      # change to a manifest), logs out, and reads the digest back with no credentials, as every user
+      # pulls it. A re-run pushes the same bytes again. The package ghcr.io/traxsharp/trax-egress must
+      # be public and linked to this repository, once, by an owner; until it is, the read-back fails
+      # and nothing reaches NuGet.
+      - name: Push the egress image
+        env:
+          PKG_VERSION: ${{ needs.release.outputs.version }}
+          EGRESS_DIGEST: ${{ needs.build.outputs.egress-digest }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          archive=oci-archive:egress/trax-egress.tar
+          image="docker://ghcr.io/traxsharp/trax-egress:$PKG_VERSION"
+          # A digest is the sha256 of the top-level manifest's bytes: here the index of both platforms.
+          skopeo inspect --raw "$archive" > "$RUNNER_TEMP/egress-index.json"
+          if [ "sha256:$(sha256sum "$RUNNER_TEMP/egress-index.json" | cut -d ' ' -f 1)" != "$EGRESS_DIGEST" ]; then
+            echo "::error::The egress archive's index is not the digest Trax.Cli was packed with."
+            exit 1
+          fi
+          printf '%s' "$GHCR_TOKEN" | skopeo login ghcr.io --username "$GHCR_USER" --password-stdin
+          skopeo copy --all --preserve-digests "$archive" "$image"
+          skopeo logout ghcr.io
+          if ! skopeo inspect --no-creds --raw "$image" > "$RUNNER_TEMP/egress-pushed.json"; then
+            echo "::error::ghcr.io/traxsharp/trax-egress:$PKG_VERSION cannot be pulled without credentials. An owner makes the package public, once; then re-run this job. Nothing was published to NuGet."
+            exit 1
+          fi
+          pushed="sha256:$(sha256sum "$RUNNER_TEMP/egress-pushed.json" | cut -d ' ' -f 1)"
+          if [ "$pushed" != "$EGRESS_DIGEST" ]; then
+            echo "::error::ghcr.io holds trax-egress:$PKG_VERSION at $pushed, not $EGRESS_DIGEST. Nothing was published to NuGet."
+            exit 1
+          fi
+          echo "ghcr.io/traxsharp/trax-egress:$PKG_VERSION is $EGRESS_DIGEST."
+
+  # ---------------------------------------------------------------------------
   # Publish zone. Consumes the built artifacts and pushes them. Runs NO install /
   # build / test code: it downloads the SDK and Node.js toolchains and runs only
   # their own CLIs. Holds the only credentials that can publish to NuGet and npm.
   # Gated behind the protected `release` environment.
   # ---------------------------------------------------------------------------
   publish:
-    needs: [release, build]
+    needs: [release, build, push-egress]
     if: needs.release.outputs.released == 'true'
     runs-on: ubuntu-latest
     # Most of it is the wait for a maintainer to approve the staged npm version (an hour at
@@ -340,6 +484,15 @@ jobs:
           subject-path: |
             nupkg/*.nupkg
             npm/*.tgz
+      - name: Attest the egress image (SLSA)
+        # By the manifest digest Trax.Cli names and ghcr.io serves, which push-egress has already
+        # checked the registry holds, so `gh attestation verify oci://ghcr.io/traxsharp/trax-egress@<digest>`
+        # finds it. The attestation is kept by GitHub, not pushed beside the image: that would need
+        # packages: write here.
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
+        with:
+          subject-name: ghcr.io/traxsharp/trax-egress
+          subject-digest: ${{ needs.build.outputs.egress-digest }}
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
         with:

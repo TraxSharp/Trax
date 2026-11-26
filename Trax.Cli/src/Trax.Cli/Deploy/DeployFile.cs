@@ -52,6 +52,12 @@ internal sealed partial class DeployFile
     public List<string> Secrets { get; set; } = [];
 
     /// <summary>
+    /// The egress image to run beside a service that names <c>egress</c>, by digest
+    /// (<c>ghcr.io/traxsharp/trax-egress@sha256:...</c>). Without it, the image this trax was released with.
+    /// </summary>
+    public string? EgressImage { get; set; }
+
+    /// <summary>
     /// The environments this app deploys to, by name (<c>production</c>, <c>staging</c>), each on the target it names:
     /// a compose stack, an AWS stack or a Kubernetes namespace.
     /// </summary>
@@ -89,7 +95,19 @@ internal sealed partial class DeployFile
             throw new InvalidOperationException(
                 Problem($"profile '{env.Profile}' is not production or try.")
             );
+        foreach (var (service, entry) in Services)
+            if (CheckEgress(service, entry) is { } egress)
+                throw new InvalidOperationException(Problem(egress));
         CheckTarget(name, env, Problem);
+        try
+        {
+            env.DrainTimeoutValue();
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new InvalidOperationException(Problem(ex.Message), ex);
+        }
+        CheckEnvironmentLimits(env, Problem);
         foreach (var service in env.Counts.Keys)
             if (!Services.ContainsKey(service))
                 throw new InvalidOperationException(
@@ -211,6 +229,18 @@ internal sealed partial class DeployFile
                             + "a ':' in configuration (Auth__Authority)."
                     )
                 );
+        foreach (var setting in Settings.Concat(Secrets))
+            if (
+                setting.StartsWith("Trax__Deploy__", StringComparison.OrdinalIgnoreCase)
+                || setting.StartsWith("Trax:Deploy:", StringComparison.OrdinalIgnoreCase)
+            )
+                throw new InvalidOperationException(
+                    Problem(
+                        $"'{setting}' is under Trax:Deploy, which trax deploy sets itself: whether a hub is exposed "
+                            + "only on a tailnet, and the secret its proxy proves itself with. An app that set them "
+                            + "could switch tailnet sign-in on where nothing protects it."
+                    )
+                );
         var both = Settings.Intersect(Secrets, StringComparer.Ordinal).ToList();
         if (both.Count > 0)
             throw new InvalidOperationException(
@@ -223,19 +253,35 @@ internal sealed partial class DeployFile
                 );
     }
 
+    /// <summary>
+    /// The names a deployment gives its own services, one-shots and Jobs, so no app service may take them: a second
+    /// compose service, podman file or Job label of the same name would collide.
+    /// </summary>
+    private static readonly string[] ReservedNames =
+    [
+        Kubernetes.KubernetesTarget.Database,
+        Kubernetes.KubernetesTarget.Broker,
+        Kubernetes.KubernetesTarget.MigrateName,
+        Kubernetes.KubernetesTarget.DrainName,
+        Kubernetes.KubernetesTarget.ResumeName,
+    ];
+
     private void CheckServices(string path)
     {
         string Problem(string what) => $"{path}: {what}";
+
+        CheckEgressImage(Problem);
 
         var dir = Path.GetDirectoryName(Path.GetFullPath(path)).NotNull();
         var ports = new Dictionary<int, string>();
         foreach (var (name, service) in Services)
         {
-            if (!Name.IsMatch(name) || name is "database" or "rabbitmq" or "migrate")
+            if (!Name.IsMatch(name) || ReservedNames.Contains(name, StringComparer.Ordinal))
                 throw new InvalidOperationException(
                     Problem(
                         $"service '{name}' must be lower case, start with a letter, hold only letters, digits and "
-                            + "dashes, and not be database, rabbitmq or migrate, which the deployment uses itself."
+                            + $"dashes, and not be {string.Join(", ", ReservedNames[..^1])} or {ReservedNames[^1]}, "
+                            + "which the deployment uses itself."
                     )
                 );
             if (!File.Exists(Path.Combine(dir, service.Project)))
@@ -259,21 +305,77 @@ internal sealed partial class DeployFile
                         $"service '{name}' has port {port.ToString(CultureInfo.InvariantCulture)}, which service '{ports[port]}' has too."
                     )
                 );
-            if (service.Memory < ServiceHardening.MinimumMemoryMiB)
-                throw new InvalidOperationException(
-                    Problem(
-                        string.Create(
-                            CultureInfo.InvariantCulture,
-                            $"service '{name}' has memory {service.Memory}; it must be at least "
-                                + $"{ServiceHardening.MinimumMemoryMiB} (MiB)."
-                        )
-                    )
-                );
+            var limit = CheckLimits(
+                $"service '{name}'",
+                service.Memory,
+                service.Pids,
+                service.Cpus
+            );
+            if (limit is not null)
+                throw new InvalidOperationException(Problem(limit));
             if (service.Count < 1)
                 throw new InvalidOperationException(
                     Problem($"service '{name}' has count {service.Count}; it must be at least 1.")
                 );
+            if (CheckEgress(name, service) is { } egress)
+                throw new InvalidOperationException(Problem(egress));
         }
+    }
+
+    /// <summary>Refuses an <c>egressImage</c> not named by digest.</summary>
+    private void CheckEgressImage(Func<string, string> problem)
+    {
+        if (EgressImage is { } image && !DeployEgress.IsDigestReference(image))
+            throw new InvalidOperationException(
+                problem(
+                    $"egressImage '{image}' is not an image named by digest. Give "
+                        + $"<registry>/<path>@sha256:<digest> ({DeployEgress.Repository}@sha256:...), so what runs "
+                        + "cannot change after the file is written."
+                )
+            );
+    }
+
+    /// <summary>
+    /// The first problem with <paramref name="service"/>'s egress, or null: its domains, and its sidecar's name, which
+    /// compose takes as <c>&lt;service&gt;-egress</c> and another service must not have.
+    /// </summary>
+    private string? CheckEgress(string name, DeployService service)
+    {
+        if (DeployEgress.Check(name, service.Egress) is { } problem)
+            return problem;
+        if (
+            service.Egress is not null
+            && Services.ContainsKey($"{name}-{DeployEgress.SidecarContainer}")
+        )
+            return $"service '{name}' names egress, and its egress sidecar would be named "
+                + $"'{name}-{DeployEgress.SidecarContainer}', which is another service. Rename that service.";
+        return null;
+    }
+
+    /// <summary>
+    /// The first limit of <paramref name="who"/> that no runtime would accept, as a sentence, or null when every one
+    /// is in range: memory at least <see cref="ServiceHardening.MinimumMemoryMiB"/>, pids at least
+    /// <see cref="ServiceHardening.MinimumPids"/>, CPUs from <see cref="ServiceHardening.MinimumCpus"/> to
+    /// <see cref="ServiceHardening.MaximumCpus"/>.
+    /// </summary>
+    internal static string? CheckLimits(string who, int? memory, int? pids, decimal? cpus)
+    {
+        if (memory < ServiceHardening.MinimumMemoryMiB)
+            return string.Create(
+                CultureInfo.InvariantCulture,
+                $"{who} has memory {memory}; it must be at least {ServiceHardening.MinimumMemoryMiB} (MiB)."
+            );
+        if (pids < ServiceHardening.MinimumPids)
+            return string.Create(
+                CultureInfo.InvariantCulture,
+                $"{who} has pids {pids}; it must be at least {ServiceHardening.MinimumPids}."
+            );
+        if (cpus is { } c && (c < ServiceHardening.MinimumCpus || c > ServiceHardening.MaximumCpus))
+            return string.Create(
+                CultureInfo.InvariantCulture,
+                $"{who} has cpus {c}; it must be from {ServiceHardening.MinimumCpus} to {ServiceHardening.MaximumCpus}."
+            );
+        return null;
     }
 
     /// <summary>The full path of <paramref name="service"/>'s project.</summary>

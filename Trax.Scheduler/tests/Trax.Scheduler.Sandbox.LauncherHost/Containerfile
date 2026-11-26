@@ -1,0 +1,5 @@
+# The sandbox launcher for the cluster proof: the published LauncherHost on the ASP.NET runtime.
+FROM mcr.microsoft.com/dotnet/aspnet:10.0
+COPY app/ /app/
+USER 65532:65532
+ENTRYPOINT ["dotnet", "/app/Trax.Scheduler.Sandbox.LauncherHost.dll"]

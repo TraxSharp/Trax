@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Trax.Effect.Configuration.Deploy;
 using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Data.Services.DeployMigration;
+using Trax.Effect.Data.Services.Drain;
 
 namespace Trax.Effect.Data.Extensions;
 
@@ -40,7 +41,9 @@ public static class TraxDeployExtensions
     /// <summary>
     /// Runs the host, as <c>host.RunAsync()</c> does, unless the process was started with
     /// <c>--trax-export-deploy &lt;path&gt;</c>, which runs the host's startup checks, writes its
-    /// <see cref="DeployManifest"/> to the path and returns without serving, or with <c>--trax-migrate</c>. Then
+    /// <see cref="DeployManifest"/> to the path and returns without serving; with <c>--trax-drain [timeout]</c>, which
+    /// stops every host sharing the database from starting new work and waits for what is busy (see
+    /// <see cref="TraxDrain"/>), or <c>--trax-resume</c>, which ends that; or with <c>--trax-migrate</c>. Then
     /// Trax's schema has already been migrated while services were registered; this applies the migrations of every
     /// context named with <see cref="MigrateOnDeploy{TContext}"/>, in the order they were named, logs what each did,
     /// and returns without starting the host, so no hosted service runs and nothing listens.
@@ -63,7 +66,10 @@ public static class TraxDeployExtensions
                 args,
                 TraxDeployExport.Path,
                 TraxMigrate.Requested,
-                cancellationToken
+                cancellationToken,
+                Environment.GetCommandLineArgs(),
+                Environment.GetEnvironmentVariable(TraxDrain.ForceVariable),
+                Environment.GetEnvironmentVariable(TraxDrain.HoldVariable)
             )
             .ConfigureAwait(false);
     }
@@ -73,12 +79,18 @@ public static class TraxDeployExtensions
     /// <param name="processExportPath">The path the process's own <c>--trax-export-deploy</c> names, or null.</param>
     /// <param name="processMigrates">Whether the process was started with <c>--trax-migrate</c>.</param>
     /// <param name="cancellationToken">Stops the host, or the migration.</param>
+    /// <param name="processArgs">The process's own command line, read for <c>--trax-drain</c> and <c>--trax-resume</c>.</param>
+    /// <param name="forceVariable">The value of <c>TRAX_DRAIN_FORCE</c>.</param>
+    /// <param name="holdVariable">The value of <c>TRAX_DRAIN_HOLD</c>.</param>
     internal static async Task RunTraxAsync(
         this IHost host,
         string[]? args,
         string? processExportPath,
         bool processMigrates,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        IReadOnlyList<string>? processArgs = null,
+        string? forceVariable = null,
+        string? holdVariable = null
     )
     {
         var exportPath = (args is null ? null : TraxDeployExport.PathIn(args)) ?? processExportPath;
@@ -93,6 +105,31 @@ public static class TraxDeployExtensions
                     "Wrote the deploy manifest to {Path}.",
                     Path.GetFullPath(exportPath)
                 );
+            return;
+        }
+
+        var drainArgs =
+            args is not null && TraxDrain.RequestedIn(args) ? args
+            : processArgs is not null && TraxDrain.RequestedIn(processArgs) ? processArgs
+            : null;
+        if (drainArgs is not null)
+        {
+            if (TraxDrain.TimeoutIn(drainArgs) is { } timeout)
+                await DrainCommand
+                    .DrainAsync(
+                        host.Services,
+                        timeout,
+                        TraxDrain.HoldIn(holdVariable),
+                        TraxDrain.ForceRequested(forceVariable),
+                        DrainCommand.Settle,
+                        DrainCommand.Poll,
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false);
+            else
+                await DrainCommand
+                    .ResumeAsync(host.Services, cancellationToken)
+                    .ConfigureAwait(false);
             return;
         }
 

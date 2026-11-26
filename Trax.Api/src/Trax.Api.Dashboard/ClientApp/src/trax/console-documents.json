@@ -86,6 +86,14 @@
       "text": "mutation DisableManifest($externalId: String!) {\n  operations {\n    disableManifest(externalId: $externalId) {\n      success\n      message\n    }\n  }\n}\n"
     },
     {
+      "name": "Drain",
+      "text": "query Drain {\n  operations {\n    config {\n      drain {\n        drained\n        until\n        startedAt\n        startedBy\n        busy {\n          kind\n          id\n          name\n          state\n          since\n          host\n        }\n        busyTotal\n      }\n    }\n  }\n}\n"
+    },
+    {
+      "name": "DrainHosts",
+      "text": "mutation DrainHosts($minutes: Int) {\n  operations {\n    config {\n      drain(minutes: $minutes) {\n        success\n        message\n      }\n    }\n  }\n}\n"
+    },
+    {
       "name": "Effects",
       "text": "query Effects {\n  operations {\n    effects {\n      name\n      fullName\n      enabled\n      toggleable\n      isConfigurable\n      configurationTypeName\n      configuration\n      fields {\n        name\n        typeName\n        kind\n        nullable\n        enumValues\n        sensitive\n        hasValue\n        value\n        hint\n      }\n    }\n  }\n}\n"
     },
@@ -252,6 +260,10 @@
     {
       "name": "ResumeExecution",
       "text": "mutation ResumeExecution($id: Long!, $from: String) {\n  operations {\n    resumeExecution(id: $id, from: $from) {\n      success\n      message\n      id\n    }\n  }\n}\n"
+    },
+    {
+      "name": "ResumeHosts",
+      "text": "mutation ResumeHosts {\n  operations {\n    config {\n      resume {\n        success\n        message\n      }\n    }\n  }\n}\n"
     },
     {
       "name": "RunGraph",

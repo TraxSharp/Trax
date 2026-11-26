@@ -4,7 +4,8 @@ namespace Trax.Cli.Deploy.Kubernetes;
 /// What a kubernetes environment on EKS renders from besides the file: where each service's image was pushed, the
 /// foundation's database and secret, and the security groups the app's pods wear. <see cref="ClusterSecurityGroup"/>
 /// is the cluster's own group, which the pods keep for DNS and each other when Security Groups for Pods replaces their
-/// node's groups.
+/// node's groups. <see cref="SecretsManagerEndpoint"/> is the DNS name of the foundation's Secrets Manager endpoint,
+/// which the pods read their secrets through.
 /// </summary>
 internal sealed record EksTarget(
     IReadOnlyDictionary<string, string> Images,
@@ -14,5 +15,6 @@ internal sealed record EksTarget(
     string DatabaseSecretArn,
     string DatabaseClientSecurityGroup,
     string ClusterSecurityGroup,
-    bool PodSecurityGroups
+    bool PodSecurityGroups,
+    string SecretsManagerEndpoint
 );

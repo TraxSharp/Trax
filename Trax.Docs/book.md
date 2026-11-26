@@ -41,7 +41,7 @@ quick start, and each chapter compiles as the whole project so far.
 | The storefront | [16. A generated client](/docs/book/a-generated-client) | a React storefront | generated clients |
 | | [17. Checkout in the browser](/docs/book/checkout-in-the-browser) | checkout in React | the TypeScript twin |
 | | [18. Require persisted operations](/docs/book/require-persisted-operations) | only known documents run | persisted operations |
-| Shipping it | [19. Deploy](/docs/book/deploy) | a hub and two workers in containers | deployment, health checks |
+| Shipping it | [19. Deploy](/docs/book/deploy) | a hub and two workers, deployed | `trax deploy`, migrations, drains, health checks |
 
 [What Trax does](/docs/what-trax-does) has the same features grouped by capability, with the page
 that explains each.
@@ -222,12 +222,14 @@ working when text is refused.
 
 ### [19. Deploy](/docs/book/deploy)
 
-Run the hub and two workers in containers against one Postgres and RabbitMQ, in Production.
-Migrate the shop's schema with EF Core, add health checks, and decide what guards the console.
+Deploy the hub and its workers with `trax deploy`, against one Postgres and RabbitMQ, in
+Production: as a compose stack on your machine, then on a Kubernetes cluster from the same file.
+Migrate the shop's schema with EF Core in the deploy's migrate step, add health checks, release a
+new version over a running one, and decide what guards the console.
 
 You learn: the [deployment topologies](/docs/reference/deployment-topologies), EF migrations
-beside Trax's own, broadcasting runs between processes, health checks, and what each process
-needs.
+beside Trax's own, broadcasting runs between processes, health checks, what each process reports it
+needs, `trax.deploy.json`, the drain before a release, egress, and a rollback on a cluster.
 
 ## Where to go next
 

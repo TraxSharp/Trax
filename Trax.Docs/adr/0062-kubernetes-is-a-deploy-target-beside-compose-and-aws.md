@@ -19,10 +19,12 @@ and ECS stays as the cheapest way onto AWS. Decided 2026-11-16 and 2026-11-17.
 ## What was decided
 
 - **Each environment names its own target**: `"target": "compose"`, `"aws"` (ECS Fargate) or `"kubernetes"`. One
-  file can hold staging on kind and production on ECS.
+  file can hold staging on k3s and production on ECS.
 - **The Kubernetes target never creates a cluster**, on any cloud. It applies plain manifests to the cluster the
   current kubeconfig context names, with the Kubernetes .NET client: the migrate Job first, then the Deployments.
-  The hub's Deployment uses `Recreate`, so two hubs never run at once; workers roll.
+  The hub's Deployment rolls with its next copy beside it after the deploy drains the hosts
+  (cli/0007); workers roll. It used
+  `Recreate` until 2026-11-24.
 - **Both ways onto AWS stay, over one foundation.** The AWS foundation (network, closed security groups, RDS,
   Secrets Manager, Cognito) is its own CloudFormation stack per environment. ECS is a runtime stack on top of it;
   Kubernetes on EKS is the Kubernetes target pointed at a cluster in the same network, with either side bringing
@@ -59,13 +61,14 @@ and ECS stays as the cheapest way onto AWS. Decided 2026-11-16 and 2026-11-17.
 
 - Every field `trax.deploy.json` gains (exposure, egress, memory) needs an answer on every target, or a refusal.
 - A single-stack AWS deployment from before the split is redeployed, not migrated in place.
-- A deploy on Kubernetes has a few seconds with no hub, the price of never running two.
+- A deploy on Kubernetes waits for the drain before it rolls, and then runs two hubs for the length of the roll,
+  which the drain makes safe (cli/0007). Before 2026-11-24 it had a few seconds with no hub instead.
 
 ## Exemplars
 
 **Enforced elsewhere:** `DeployKubernetesTests` and `KubernetesDeployerTests` in `Trax.Cli/tests/Trax.Cli.Tests/`
-hold the Kubernetes target to it: each environment names its target, the hub's Deployment is `Recreate` at one
-copy, the in-cluster database is refused under production, every container gets the hardening compose gives the
+hold the Kubernetes target to it: each environment names its target, the hub's Deployment is one copy that rolls with
+none unavailable (`KubernetesDrainTests` holds the rest of cli/0007), the in-cluster database is refused under production, every container gets the hardening compose gives the
 same service, and the migrate Job runs before any Deployment is applied. `EksDeployTests` holds the EKS side: no
 secret reaches a manifest, the pods' role reads only the environment's secrets, the database admits the nodes only
 when the environment says so, and a host that does not read its secrets from AWS, or a context that is not the named
@@ -73,6 +76,10 @@ cluster, is refused before anything changes. `TraxAwsSecretsTests` in `Trax.Effe
 
 ## Changelog
 
+- **2026-11-24**: kind is not a cluster trax deploys to: its nodes are containers, so its pods cannot have
+  `hostUsers: false`. The example above names k3s instead.
+- **2026-11-24**: A hub rolls with its next copy beside it after a drain, in place of `Recreate`; recorded in
+  cli/0007 (user).
 - **2026-11-23**: On EKS: how the database password reaches the host, pod security groups by default with node access
   by name, and the context checked against the named cluster (user).
 - **2026-11-17**: Recorded.

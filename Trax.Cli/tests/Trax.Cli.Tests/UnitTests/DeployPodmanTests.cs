@@ -25,6 +25,7 @@ public partial class DeployPodmanTests
     private const string Stack = "orders-home";
     private const string Dir = "/src/.trax/deploy/podman/orders-home";
     private const string SecretPath = "/home/u/.config/trax/orders-home/secret.yaml";
+    private const string Locked = "/usr/bin/flock /home/u/.config/trax/orders-home/secret.lock";
 
     private string _dir = "";
     private string _config = "";
@@ -116,6 +117,8 @@ public partial class DeployPodmanTests
             .BeEquivalentTo([
                 "orders-home.network",
                 "orders-home-migrate.yaml",
+                "orders-home-drain.yaml",
+                "orders-home-resume.yaml",
                 "orders-home-database.yaml",
                 "orders-home-database.kube",
                 "orders-home-rabbitmq.yaml",
@@ -137,6 +140,28 @@ public partial class DeployPodmanTests
             .And.Contain("--trax-migrate");
         files["orders-home-database.yaml"].Should().Contain("image: docker.io/library/postgres:17");
         files["orders-home-rabbitmq.yaml"].Should().Contain("image: docker.io/library/rabbitmq:4");
+    }
+
+    [TestCase("migrate", "--trax-migrate")]
+    [TestCase("drain", "--trax-drain")]
+    [TestCase("resume", "--trax-resume")]
+    public void Each_one_shot_is_a_pod_that_never_restarts_so_podman_4_9_plays_it(
+        string kind,
+        string argument
+    )
+    {
+        var yaml = Files(Render())[$"orders-home-{kind}.yaml"];
+        var pod = k8s.KubernetesYaml.Deserialize<k8s.Models.V1Pod>(
+            yaml[yaml.IndexOf("apiVersion", StringComparison.Ordinal)..]
+        );
+
+        pod.Kind.Should().Be("Pod", "kube play runs a Job only from podman 5");
+        // kube play names the container <pod>-<container>: the name the units wait on.
+        pod.Metadata.Name.Should().Be($"orders-home-{kind}-pod");
+        pod.Spec.Containers.Single().Name.Should().Be(kind);
+        pod.Spec.RestartPolicy.Should().Be("Never");
+        pod.Spec.HostUsers.Should().BeNull();
+        yaml.Should().Contain(argument).And.NotContain("kind: Job");
     }
 
     [Test]
@@ -191,7 +216,7 @@ public partial class DeployPodmanTests
         ExecStartPre(hub)
             .Should()
             .Equal(
-                $"/usr/bin/podman kube play --replace {SecretPath}",
+                $"{Locked} /usr/bin/podman kube play --replace {SecretPath}",
                 "/bin/sh -c 'for i in $$(seq 120); do /usr/bin/podman exec orders-home-database-pod-database "
                     + "pg_isready -q -U orders && exit 0; sleep 1; done; echo \"the database did not become "
                     + "ready\" >&2; exit 1'",
@@ -212,7 +237,30 @@ public partial class DeployPodmanTests
             .Contain("Requires=orders-home-hub.service\nAfter=orders-home-hub.service\n")
             .And.NotContain("PublishPort")
             .And.NotContain("migrate");
-        ExecStartPre(worker).Should().Equal($"/usr/bin/podman kube play --replace {SecretPath}");
+        ExecStartPre(worker)
+            .Should()
+            .Equal($"{Locked} /usr/bin/podman kube play --replace {SecretPath}");
+    }
+
+    [Test]
+    public void Every_unit_plays_the_secrets_under_one_lock()
+    {
+        // Units start together and each plays the Secrets with --replace; unlocked, two plays tear the Secret down and
+        // create it over each other and one fails with "secret name in use".
+        var units = Files(Render())
+            .Where(f => f.Key.EndsWith(".kube", StringComparison.Ordinal))
+            .ToList();
+
+        units.Should().NotBeEmpty();
+        foreach (var (name, unit) in units)
+            ExecStartPre(unit)
+                .Where(l =>
+                    l.Contains("kube play --replace " + SecretPath, StringComparison.Ordinal)
+                )
+                .Should()
+                .ContainSingle(name)
+                .Which.Should()
+                .StartWith(Locked, name);
     }
 
     [Test]
@@ -367,8 +415,26 @@ public partial class DeployPodmanTests
         );
 
         psi.ArgumentList.Should()
-            .Contain("-p:LocalRegistry=podman")
+            .Contain(
+                "-p:LocalRegistry=Podman",
+                "the SDK refuses any other spelling (CONTAINER2002)"
+            )
             .And.Contain("-p:ContainerRepository=orders-hub");
+    }
+
+    [TestCase("podman", "Podman")]
+    [TestCase("docker", "Docker")]
+    public void The_local_runtime_is_named_as_the_sdk_spells_it(string runtime, string sdk) =>
+        DotnetContainerPublisher.LocalRegistry(runtime).Should().Be(sdk);
+
+    [Test]
+    public void A_local_runtime_the_sdk_does_not_load_into_is_refused()
+    {
+        var act = () => DotnetContainerPublisher.LocalRegistry("containerd");
+
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*'containerd'*Use podman or docker*");
     }
 
     [Test]

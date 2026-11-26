@@ -31,6 +31,9 @@ internal static partial class AwsStack
 
     public const string MigrateContainer = "migrate";
 
+    /// <summary>How long ECS waits after SIGTERM before it kills a container: 120 seconds, the most Fargate allows.</summary>
+    public const int StopTimeoutSeconds = 120;
+
     /// <summary>The address range of a VPC the stack creates; also the networks hosts trust forwarded headers from.</summary>
     public const string VpcCidr = "10.0.0.0/16";
 
@@ -302,7 +305,14 @@ internal static partial class AwsStack
         var environment = TaskEnvironment(file, env);
         var secrets = TaskSecrets(file, env, stack);
         var migrator = Migrator(file, exports);
-        AddMigrateTask(resources, outputs, stack, environment, secrets);
+        AddMigrateTask(
+            resources,
+            outputs,
+            stack,
+            environment,
+            secrets,
+            ServiceHardening.Trax(file.Services[migrator])
+        );
         AddServices(
             resources,
             outputs,
@@ -345,7 +355,8 @@ internal static partial class AwsStack
         JsonObject outputs,
         string stack,
         List<(string Name, JsonNode Value)> environment,
-        List<(string Name, JsonNode From)> secrets
+        List<(string Name, JsonNode From)> secrets,
+        ServiceHardening hardening
     )
     {
         AddTask(
@@ -356,7 +367,8 @@ internal static partial class AwsStack
             environment,
             secrets,
             port: false,
-            command: TraxMigrate.Argument
+            command: TraxMigrate.Argument,
+            hardening
         );
         outputs["MigrateTaskDefinition"] = Output(Ref("MigrateTaskDefinition"));
         outputs["MigrateContainer"] = Output(MigrateContainer);
@@ -652,7 +664,8 @@ internal static partial class AwsStack
                 serving,
                 secrets,
                 network,
-                production
+                production,
+                ServiceHardening.Trax(file.Services[service])
             );
     }
 
@@ -665,7 +678,8 @@ internal static partial class AwsStack
         List<(string Name, JsonNode Value)> serving,
         List<(string Name, JsonNode From)> secrets,
         ServiceNetwork network,
-        bool production
+        bool production,
+        ServiceHardening hardening
     )
     {
         var isApi = string.Equals(service, api, StringComparison.Ordinal);
@@ -677,7 +691,8 @@ internal static partial class AwsStack
             serving,
             secrets,
             port: isApi,
-            command: null
+            command: null,
+            hardening
         );
         var id = LogicalId(service);
         var properties = ServiceProperties(service, id, network);
@@ -782,6 +797,10 @@ internal static partial class AwsStack
     )
     {
         ComposeTarget.CheckHosts(file, exports, name => file.Count(env, name));
+        TailnetSignIn.Refuse(
+            exports,
+            "an aws environment serves through a public load balancer, where anyone can send those headers."
+        );
         var apis = file.Services.Keys.Where(s => exports[s].Roles.Contains("api")).ToList();
         if (apis.Count > 1)
             throw new InvalidOperationException(
@@ -1387,7 +1406,8 @@ internal static partial class AwsStack
         IReadOnlyList<(string Name, JsonNode Value)> environment,
         IReadOnlyList<(string Name, JsonNode From)> secrets,
         bool port,
-        string? command
+        string? command,
+        ServiceHardening hardening
     )
     {
         var id = LogicalId(name);
@@ -1410,13 +1430,29 @@ internal static partial class AwsStack
             );
         if (command is not null)
             container["Command"] = new JsonArray(command);
+        // A stopped task's container gets this long after SIGTERM before it is killed: Fargate's most. A deploy drains
+        // before it rolls (Trax.Docs/adr/0065), so a host has nothing left to finish here unless it ran with --force.
+        container["StopTimeout"] = StopTimeoutSeconds;
+        // A Trax host writes nothing outside /tmp, which is the task's own scratch volume.
+        container["ReadonlyRootFilesystem"] = hardening.ReadOnlyRoot;
+        // Every Linux capability dropped, as on every other target. A Trax host needs none, and Fargate allows only
+        // dropping (and adding SYS_PTRACE), so this is the whole of ServiceHardening's capability set here.
+        container["LinuxParameters"] = new JsonObject
+        {
+            ["Capabilities"] = new JsonObject { ["Drop"] = new JsonArray("ALL") },
+        };
+        if (hardening.ReadOnlyRoot)
+            container["MountPoints"] = new JsonArray(
+                new JsonObject { ["SourceVolume"] = ScratchVolume, ["ContainerPath"] = "/tmp" }
+            );
+        var size = FargateSize.For(hardening.MemoryMiB, hardening.Cpus);
         resources[$"{id}TaskDefinition"] = Resource(
             "AWS::ECS::TaskDefinition",
             new JsonObject
             {
                 ["Family"] = $"{stack}-{name}",
-                ["Cpu"] = "512",
-                ["Memory"] = "1024",
+                ["Cpu"] = size.Cpu.ToString(CultureInfo.InvariantCulture),
+                ["Memory"] = size.MemoryMiB.ToString(CultureInfo.InvariantCulture),
                 ["NetworkMode"] = "awsvpc",
                 ["RequiresCompatibilities"] = new JsonArray("FARGATE"),
                 ["RuntimePlatform"] = new JsonObject
@@ -1427,9 +1463,15 @@ internal static partial class AwsStack
                 ["ExecutionRoleArn"] = GetAtt("TaskExecutionRole", "Arn"),
                 ["TaskRoleArn"] = GetAtt($"{id}TaskRole", "Arn"),
                 ["ContainerDefinitions"] = new JsonArray(container),
+                ["Volumes"] = hardening.ReadOnlyRoot
+                    ? new JsonArray(new JsonObject { ["Name"] = ScratchVolume })
+                    : new JsonArray(),
             }
         );
     }
+
+    /// <summary>The task volume a read-only container writes its <c>/tmp</c> to.</summary>
+    private const string ScratchVolume = "tmp";
 
     private static JsonObject UserPoolResource(string stack) =>
         Resource(

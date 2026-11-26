@@ -21,6 +21,7 @@ The full disclaimer, including the consumer responsibility checklist, ships in t
 | `Trax.Api.Auth.Jwt.Cognito.Issuer` | Mints Cognito-shaped RS256 tokens, with a refresh-token store contract. | [Cognito issuer](https://traxsharp.net/docs/sdk-reference/api-auth/cognito-token-issuer) |
 | `Trax.Api.Auth.Jwt.Testing` | A self-hosted JWKS server and token minters for integration tests. | [JWT testing](https://traxsharp.net/docs/sdk-reference/api-auth/test-jwks-server) |
 | `Trax.Api.Auth.Oidc` | OpenID Connect code flow with PKCE and a session cookie, for browser sign-in. | [AddTraxOidcAuth](https://traxsharp.net/docs/sdk-reference/api-auth/add-trax-oidc-auth) |
+| `Trax.Api.Auth.Tailscale` | Tailnet sign-in from Tailscale serve's identity headers, trusted only on a request carrying the proxy secret `trax deploy` minted. | [AddTraxTailscaleAuth](https://traxsharp.net/docs/sdk-reference/api-auth/add-trax-tailscale-auth) |
 | `Trax.Api.GraphQL.Audit` | Records each GraphQL request to your `ITraxAuditSink` from a bounded channel and a background writer. | [API Security](https://traxsharp.net/docs/security/secure-a-graphql-host) |
 
 ## Installation

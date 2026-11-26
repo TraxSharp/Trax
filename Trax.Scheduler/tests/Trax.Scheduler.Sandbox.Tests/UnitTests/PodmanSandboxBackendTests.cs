@@ -1,0 +1,373 @@
+using System.Formats.Tar;
+using Microsoft.Extensions.Logging.Abstractions;
+using Trax.Scheduler.Sandbox.Launcher.Backends;
+using Trax.Scheduler.Sandbox.Tests.Fakes;
+using Trax.Scheduler.Services.Sandbox;
+
+namespace Trax.Scheduler.Sandbox.Tests.UnitTests;
+
+/// <summary>
+/// The podman backend's calls: the sandbox it creates is shaped only by the launcher, its output
+/// is read through the holder after it exits, and every container and volume of the run is gone
+/// afterwards, whatever happened.
+///
+/// <para>Enforces <c>docs/adr/0021-a-sandboxs-output-comes-back-on-a-volume-the-launcher-reads-after-it-exits.md</c>.</para>
+/// </summary>
+[Property(
+    "adr",
+    "docs/adr/0021-a-sandboxs-output-comes-back-on-a-volume-the-launcher-reads-after-it-exits.md"
+)]
+[TestFixture]
+public class PodmanSandboxBackendTests
+{
+    private const string Adr =
+        "docs/adr/0021-a-sandboxs-output-comes-back-on-a-volume-the-launcher-reads-after-it-exits.md";
+
+    private const string RunId = "0123456789abcdef0123456789abcdef";
+
+    private static readonly byte[] Request = "{\"train\":\"t\"}"u8.ToArray();
+
+    private static SandboxJob Job(int timeout = 30) =>
+        new(
+            RunId,
+            LauncherOptions.Podman().Profiles["escape"],
+            new SandboxLimits(500, 192, 8, timeout),
+            new Dictionary<string, byte[]>(StringComparer.Ordinal)
+            {
+                [SandboxPaths.RequestFile] = Request,
+            }
+        );
+
+    private static PodmanSandboxBackend Backend(
+        FakePodman podman,
+        Func<string, CancellationToken, Task<string?>>? cgroupFile = null
+    ) =>
+        new(
+            new PodmanApi(new HttpClient(podman) { BaseAddress = new Uri("http://podman") }),
+            LauncherOptions.Podman(),
+            "kata",
+            TimeProvider.System,
+            NullLogger<PodmanSandboxBackend>.Instance,
+            cgroupFile ?? ((_, _) => Task.FromResult<string?>(null))
+        );
+
+    private const string PodCgroup =
+        "/user.slice/user-1001.slice/user@1001.service/user.slice/user-libpod_pod_0a1b.slice";
+
+    private static async Task<byte[]> OutputAsync(TarBuilder tar)
+    {
+        var stream = await tar.BuildAsync().ConfigureAwait(false);
+        await using (stream.ConfigureAwait(false))
+            return stream.ToArray();
+    }
+
+    private static void RemovedEverything(FakePodman podman)
+    {
+        podman
+            .Calls.Should()
+            .Contain($"DELETE /v5.0.0/libpod/containers/trax-sbx-{RunId}?force=true&v=true&t=0");
+        podman
+            .Calls.Should()
+            .Contain(
+                $"DELETE /v5.0.0/libpod/containers/trax-sbx-{RunId}-holder?force=true&v=true&t=0"
+            );
+        podman
+            .Calls.Should()
+            .Contain($"DELETE /v5.0.0/libpod/pods/trax-sbx-{RunId}-pod?force=true&t=0");
+        podman
+            .Calls.Should()
+            .Contain($"DELETE /v5.0.0/libpod/volumes/trax-sbx-{RunId}-in?force=true");
+        podman
+            .Calls.Should()
+            .Contain($"DELETE /v5.0.0/libpod/volumes/trax-sbx-{RunId}-out?force=true");
+    }
+
+    [Test]
+    public async Task RunAsync_ExitedSandbox_IsReadThroughTheHolderAndRemoved()
+    {
+        var podman = new FakePodman
+        {
+            Output = await OutputAsync(
+                new TarBuilder()
+                    .Directory("out/")
+                    .File("out/result.json", "{}")
+                    .File("out/files/a.txt", "a")
+            ),
+        };
+
+        var execution = await Backend(podman).RunAsync(Job(), CancellationToken.None);
+
+        execution.End.Should().Be(SandboxEnd.Exited);
+        execution.ExitCode.Should().Be(0);
+        execution.Output.Select(f => f.Path).Should().Equal("result.json", "files/a.txt");
+        podman
+            .Calls.Should()
+            .Contain($"GET /v5.0.0/libpod/containers/trax-sbx-{RunId}-holder/archive?path=%2Fout");
+        podman
+            .Calls.Should()
+            .Contain($"PUT /v5.0.0/libpod/containers/trax-sbx-{RunId}-holder/archive?path=%2Fin");
+        RemovedEverything(podman);
+    }
+
+    [Test]
+    public async Task RunAsync_TheInputGoesInThroughTheHolderBeforeTheSandboxStarts()
+    {
+        var podman = new FakePodman();
+
+        await Backend(podman).RunAsync(Job(), CancellationToken.None);
+
+        var put = podman.Calls.IndexOf(
+            $"PUT /v5.0.0/libpod/containers/trax-sbx-{RunId}-holder/archive?path=%2Fin"
+        );
+        var start = podman.Calls.IndexOf($"POST /v5.0.0/libpod/containers/trax-sbx-{RunId}/start");
+        put.Should().BeGreaterThan(-1);
+        start.Should().BeGreaterThan(put, "the sandbox must find its request when it starts");
+        var files = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+        using var archive = new MemoryStream(podman.PutArchive ?? []);
+        var reader = new TarReader(archive);
+        while (await reader.GetNextEntryAsync(copyData: true) is { } entry)
+            if (entry.DataStream is { } data)
+            {
+                using var bytes = new MemoryStream();
+                await data.CopyToAsync(bytes);
+                files[entry.Name] = bytes.ToArray();
+            }
+        files.Keys.Should().Equal(SandboxPaths.RequestFile);
+        files[SandboxPaths.RequestFile].Should().Equal(Request);
+    }
+
+    [Test]
+    public async Task RunAsync_TheSandboxSpec_IsLockedDown()
+    {
+        var podman = new FakePodman();
+
+        await Backend(podman).RunAsync(Job(), CancellationToken.None);
+
+        var spec = podman.Created[$"trax-sbx-{RunId}"];
+        spec["image"]?.GetValue<string>().Should().Be(LauncherOptions.Image);
+        spec["oci_runtime"]?.GetValue<string>().Should().Be("kata");
+        spec["netns"]?["nsmode"]?.GetValue<string>().Should().Be("none", Adr);
+        spec["read_only_filesystem"]?.GetValue<bool>().Should().BeTrue();
+        spec["no_new_privileges"]?.GetValue<bool>().Should().BeTrue();
+        spec["privileged"]?.GetValue<bool>().Should().BeFalse();
+        spec["cap_drop"]?.AsArray().Select(c => c?.GetValue<string>()).Should().Equal("all");
+        spec["user"]?.GetValue<string>().Should().Be("65532:65532");
+        spec["resource_limits"]
+            ?["memory"]?["limit"]?.GetValue<long>()
+            .Should()
+            .Be(192L * 1024 * 1024);
+        spec["resource_limits"]
+            ?["memory"]?["swap"]?.GetValue<long>()
+            .Should()
+            .Be(192L * 1024 * 1024, "no swap beyond the memory limit");
+        spec["resource_limits"]?["cpu"]?["quota"]?.GetValue<long>().Should().Be(50_000);
+        spec["resource_limits"]?["pids"]?["limit"]?.GetValue<int>().Should().Be(512);
+        spec.ContainsKey("cap_add").Should().BeFalse();
+        spec["log_configuration"]
+            ?["driver"]?.GetValue<string>()
+            .Should()
+            .Be("none", "what a sandbox prints must not fill the host's disk");
+        spec.ContainsKey("devices").Should().BeFalse();
+        var volumes = spec["volumes"]
+            ?.AsArray()
+            .Select(v => $"{v?["Dest"]}:{v?["Options"]?[0]}")
+            .ToList();
+        volumes.Should().BeEquivalentTo("/sandbox/in:ro", "/sandbox/out:rw");
+    }
+
+    [Test]
+    public async Task RunAsync_TheHolder_RunsUnderTheDefaultRuntimeWithTheOutputReadOnly()
+    {
+        var podman = new FakePodman();
+
+        await Backend(podman).RunAsync(Job(), CancellationToken.None);
+
+        var spec = podman.Created[$"trax-sbx-{RunId}-holder"];
+        spec["image"]?.GetValue<string>().Should().Be(LauncherOptions.Holder);
+        spec.ContainsKey("oci_runtime").Should().BeFalse();
+        spec["netns"]?["nsmode"]?.GetValue<string>().Should().Be("none");
+        spec["volumes"]
+            ?.AsArray()
+            .Select(v => $"{v?["Dest"]}:{v?["Options"]?[0]}")
+            .Should()
+            .BeEquivalentTo("/in:rw", "/out:ro");
+    }
+
+    [Test]
+    public async Task RunAsync_RuntimeMissing_FailsAndRemovesEverything()
+    {
+        var podman = new FakePodman { RuntimeMissing = true };
+
+        var execution = await Backend(podman).RunAsync(Job(), CancellationToken.None);
+
+        execution.End.Should().Be(SandboxEnd.Failed);
+        execution.Detail.Should().Contain("kata");
+        RemovedEverything(podman);
+    }
+
+    [Test]
+    public async Task RunAsync_PastItsTimeout_IsKilled()
+    {
+        var podman = new FakePodman { Hang = true };
+
+        var execution = await Backend(podman).RunAsync(Job(timeout: 1), CancellationToken.None);
+
+        execution.End.Should().Be(SandboxEnd.TimedOut);
+        podman
+            .Calls.Should()
+            .Contain($"POST /v5.0.0/libpod/containers/trax-sbx-{RunId}/kill?signal=SIGKILL");
+        RemovedEverything(podman);
+    }
+
+    [Test]
+    public async Task RunAsync_OomKilled_IsOutOfMemory()
+    {
+        var podman = new FakePodman { OomKilled = true, ExitCode = 137 };
+
+        (await Backend(podman).RunAsync(Job(), CancellationToken.None))
+            .End.Should()
+            .Be(SandboxEnd.OutOfMemory);
+    }
+
+    [Test]
+    public async Task RunAsync_PodmanUsesItsDefaultRuntimeInstead_FailsBeforeTheSandboxStarts()
+    {
+        // Podman before 6 ignores a container's own runtime; only the created container shows it.
+        var podman = new FakePodman { DefaultRuntimeOnly = "crun" };
+
+        var execution = await Backend(podman).RunAsync(Job(), CancellationToken.None);
+
+        execution.End.Should().Be(SandboxEnd.Failed);
+        execution.Detail.Should().Contain("'crun', not 'kata'");
+        podman.Calls.Should().NotContain($"POST /v5.0.0/libpod/containers/trax-sbx-{RunId}/start");
+        RemovedEverything(podman);
+    }
+
+    [Test]
+    public async Task RunAsync_TheSandbox_RunsInAPodOfItsOwn()
+    {
+        var podman = new FakePodman();
+
+        await Backend(podman).RunAsync(Job(), CancellationToken.None);
+
+        podman.Calls.Should().Contain("POST /v5.0.0/libpod/pods/create");
+        podman
+            .Created[$"trax-sbx-{RunId}"]["pod"]
+            ?.GetValue<string>()
+            .Should()
+            .Be($"trax-sbx-{RunId}-pod");
+        podman.Created[$"trax-sbx-{RunId}-holder"]["pod"].Should().BeNull();
+    }
+
+    [TestCase("oom 1\noom_kill 1\noom_group_kill 0\n", true)]
+    [TestCase("oom 0\noom_kill 0\n", false)]
+    public async Task RunAsync_Killed137_IsOutOfMemoryWhenItsPodCgroupCountedAMemoryKill(
+        string events,
+        bool outOfMemory
+    )
+    {
+        // Rootless podman under systemd can lose the container's own cgroup before conmon reads
+        // it, and then reports only exit 137; the pod's cgroup outlives the container.
+        var podman = new FakePodman
+        {
+            ExitCode = 137,
+            CgroupPath = PodCgroup + "/libpod-c0ffee.scope/container",
+        };
+        var read = new List<string>();
+
+        var execution = await Backend(
+                podman,
+                (path, _) =>
+                {
+                    read.Add(path);
+                    return Task.FromResult<string?>(events);
+                }
+            )
+            .RunAsync(Job(), CancellationToken.None);
+
+        execution.End.Should().Be(outOfMemory ? SandboxEnd.OutOfMemory : SandboxEnd.Exited);
+        execution.ExitCode.Should().Be(137);
+        read.Should().Equal(PodCgroup + "/memory.events");
+    }
+
+    [TestCase(null)]
+    [TestCase("/user.slice/libpod-c0ffee.scope")]
+    [TestCase("/user.slice/user-libpod_pod_0a1b.slice/../../etc")]
+    public async Task RunAsync_Killed137WithNoPodCgroupToRead_IsExited(string? cgroup)
+    {
+        var podman = new FakePodman { ExitCode = 137, CgroupPath = cgroup };
+        var read = new List<string>();
+
+        var execution = await Backend(
+                podman,
+                (path, _) =>
+                {
+                    read.Add(path);
+                    return Task.FromResult<string?>("oom_kill 1\n");
+                }
+            )
+            .RunAsync(Job(), CancellationToken.None);
+
+        execution.End.Should().Be(SandboxEnd.Exited);
+        read.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task RunAsync_OutputWithALink_IsRefused()
+    {
+        var podman = new FakePodman
+        {
+            Output = await OutputAsync(
+                new TarBuilder()
+                    .File("out/result.json", "{}")
+                    .Entry(TarEntryType.SymbolicLink, "out/files/l", "/etc/shadow")
+            ),
+        };
+
+        var execution = await Backend(podman).RunAsync(Job(), CancellationToken.None);
+
+        execution.OutputRefused.Should().Contain("symbolic link");
+        execution.Output.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task RunAsync_CallerGivesUp_StillRemovesEverything()
+    {
+        var podman = new FakePodman { Hang = true };
+        using var cancel = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+
+        await FluentActions
+            .Awaiting(() => Backend(podman).RunAsync(Job(), cancel.Token))
+            .Should()
+            .ThrowAsync<OperationCanceledException>();
+
+        RemovedEverything(podman);
+    }
+
+    [Test]
+    public async Task SweepAsync_RemovesWhatCarriesTheLauncherLabel()
+    {
+        var podman = new FakePodman();
+
+        await Backend(podman).SweepAsync(CancellationToken.None);
+
+        podman
+            .Calls.Should()
+            .Contain(c =>
+                c.StartsWith(
+                    "GET /v5.0.0/libpod/containers/json?all=true&filters=",
+                    StringComparison.Ordinal
+                ) && c.Contains("trax.sandbox.launcher", StringComparison.Ordinal)
+            );
+        podman
+            .Calls.Should()
+            .Contain(c =>
+                c.StartsWith("GET /v5.0.0/libpod/volumes/json?filters=", StringComparison.Ordinal)
+            );
+        podman
+            .Calls.Should()
+            .Contain(c =>
+                c.StartsWith("GET /v5.0.0/libpod/pods/json?filters=", StringComparison.Ordinal)
+            );
+    }
+}

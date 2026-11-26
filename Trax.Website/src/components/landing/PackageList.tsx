@@ -156,6 +156,7 @@ const folders: Folder[] = [
         desc: "A local JWKS server and token minters for tests",
       },
       { name: "Trax.Api.Auth.Oidc", desc: "OpenID Connect sign-in with PKCE" },
+      { name: "Trax.Api.Auth.Tailscale", desc: "Sign-in by tailnet identity" },
     ],
   },
   {

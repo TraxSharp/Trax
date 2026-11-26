@@ -802,6 +802,14 @@ type ConfigQueries {
   scheduler: SchedulerConfigSnapshot!
 
   """
+  Whether the hosts sharing the database are drained, until when and by whom, and the work a
+  drain waits on (at most 50 items, with the total): runs that are Pending or InProgress and
+  state-machine instances not at rest. The console's scheduler page reads the same
+  IOperationsService.GetDrainAsync.
+  """
+  drain: DrainStatus!
+
+  """
   The API host's environment name (IHostEnvironment.EnvironmentName), which the
   dashboard shows as its environment badge.
   """
@@ -1355,6 +1363,25 @@ type ConfigMutations {
   failure, names each offending field, and nothing is applied.
   """
   updateScheduler(input: UpdateSchedulerConfigInput!): OperationResponse!
+
+  """
+  Drains every host sharing the database: no host dispatches, queues a scheduled run or claims
+  a job until the drain lapses after minutes or resume ends it, while
+  running work carries on. A schedule due meanwhile is a misfire when the drain ends. Replaces a
+  drain in force and records the caller as who set it. The console's Drain calls the same
+  IOperationsService.DrainAsync. A duration outside 1 to 1440 minutes is refused.
+  """
+  drain(
+    """How long the drain lasts; 20 when omitted."""
+    minutes: Int
+  ): OperationResponse!
+
+  """
+  Ends the drain, so every host takes work again, whoever set it. count is 1 when a
+  drain was in force and 0 when none was. The console's Resume calls the same
+  IOperationsService.EndDrainAsync.
+  """
+  resume: OperationResponse!
 
   """
   Sets the level each listed log category filters at in THIS process, through
@@ -2985,6 +3012,64 @@ type SchedulerConfigSnapshot {
   letter (SchedulerConfiguration.FailureCountWindow).
   """
   failureCountWindow: Duration!
+}
+
+"""
+Whether the hosts sharing the database are drained, and what is still busy. Returned by
+IOperationsService.GetDrainAsync; the console's scheduler page and the GraphQL
+operations.config.drain query both read it.
+"""
+type DrainStatus {
+  """
+  Whether a drain is in force: no host dispatches, queues a scheduled run or claims a job until
+  Until.
+  """
+  drained: Boolean!
+
+  """When the drain lapses, in UTC; null when none is in force."""
+  until: DateTime
+
+  """When the drain was set, in UTC; null when none is in force."""
+  startedAt: DateTime
+
+  """
+  deploy for a drain a deploy set, or the operator who set it; null when none is in force.
+  """
+  startedBy: String
+
+  """
+  The work a drain waits on, at most 50 items, runs first. Read whether or not a drain is in
+  force, so an operator can see what one would wait on.
+  """
+  busy: [DrainBusyWork!]!
+
+  """How many items are busy in all, past the list's cap too."""
+  busyTotal: Int!
+}
+
+"""One piece of work a drain waits on, in DrainStatus.Busy."""
+type DrainBusyWork {
+  """
+  run: a run that is Pending or InProgress, other than one whose job waits in the queue
+  unclaimed. instance: a state-machine instance that is not at rest, because an effect is
+  in flight on it or the run it invoked is busy.
+  """
+  kind: String!
+
+  """The run's database id, or the instance's machine and id joined by /."""
+  id: String!
+
+  """The run's train, or the instance's machine."""
+  name: String!
+
+  """The run's state, or the instance's state and what it waits on."""
+  state: String!
+
+  """When the run started, or when the instance was last written, in UTC."""
+  since: DateTime!
+
+  """The host the run is on, when it records one; null for an instance."""
+  host: String
 }
 
 """

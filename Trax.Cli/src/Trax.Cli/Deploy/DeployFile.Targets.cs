@@ -11,6 +11,7 @@ internal sealed partial class DeployFile
             case DeployEnvironment.Aws:
                 CheckAws(env, problem);
                 CheckAwsNetworkAndAuth(env, problem);
+                RefuseEgressOnEcs(problem);
                 break;
             case DeployEnvironment.Compose:
                 CheckCompose(env, problem);
@@ -33,6 +34,11 @@ internal sealed partial class DeployFile
 
     private static void CheckAws(DeployEnvironment env, Func<string, string> problem)
     {
+        NoExposure(
+            env,
+            problem,
+            "aws serves through its own public load balancer, and a tailnet exposure is for a kubernetes environment"
+        );
         NotFor(
             problem,
             "aws",
@@ -69,6 +75,25 @@ internal sealed partial class DeployFile
             );
     }
 
+    /// <summary>
+    /// ECS refuses <c>egress</c>: Fargate gives a task no NET_ADMIN, so the egress image cannot apply its rules, and a
+    /// security group filters by address, not by name. The kubernetes target on EKS limits a service on AWS.
+    /// </summary>
+    private void RefuseEgressOnEcs(Func<string, string> problem)
+    {
+        foreach (var (service, entry) in Services)
+            if (entry.Egress is not null)
+                throw new InvalidOperationException(
+                    problem(
+                        $"service '{service}' names egress, which aws (ECS Fargate) cannot hold it to: Fargate "
+                            + "gives a task no NET_ADMIN, so the egress rules cannot be applied, and a security "
+                            + "group filters by address, not by domain. Deploy it with \"target\": \"kubernetes\" "
+                            + "on EKS (\"aws\": { \"cluster\": ... }), or leave egress out of a file that deploys "
+                            + "to ECS."
+                    )
+                );
+    }
+
     private static void CheckAwsNetworkAndAuth(DeployEnvironment env, Func<string, string> problem)
     {
         if (env.Network is { } network)
@@ -99,6 +124,11 @@ internal sealed partial class DeployFile
 
     private static void CheckCompose(DeployEnvironment env, Func<string, string> problem)
     {
+        NoExposure(
+            env,
+            problem,
+            "a compose stack publishes its hub on 127.0.0.1, and a tailnet exposure is for a kubernetes environment"
+        );
         NotForCloud(env, problem, "compose");
         NotFor(
             problem,
@@ -135,6 +165,7 @@ internal sealed partial class DeployFile
         NotForCloud(env, problem, "kubernetes");
         NotFor(problem, "kubernetes", ("engine", env.Engine));
         CheckRuntime(env, problem);
+        CheckExposure(env, problem);
         if (env.Namespace is { } ns && !Dns1123Label.IsMatch(ns))
             throw new InvalidOperationException(
                 problem(
@@ -167,6 +198,105 @@ internal sealed partial class DeployFile
                 throw new InvalidOperationException(
                     problem($"secret '{secret}' cannot be a key of a Kubernetes Secret.")
                 );
+    }
+
+    private static void NoExposure(DeployEnvironment env, Func<string, string> problem, string why)
+    {
+        if (env.Exposure is not null || env.TailnetOptions is not null)
+            throw new InvalidOperationException(
+                problem($"exposure and tailnet are not fields this target reads: {why}.")
+            );
+    }
+
+    /// <summary>
+    /// A kubernetes environment's exposure: none, or <c>tailnet</c>. A tailnet exposure takes the service name
+    /// <see cref="Kubernetes.KubernetesTailnet.EdgeName"/> for its proxy, and under podman the Secret key
+    /// <see cref="Kubernetes.KubernetesTailnet.AuthKeySecretKey"/> for the Tailscale auth key.
+    /// </summary>
+    private void CheckExposure(DeployEnvironment env, Func<string, string> problem)
+    {
+        switch (env.Exposure)
+        {
+            case null when env.TailnetOptions is not null:
+                throw new InvalidOperationException(
+                    problem("tailnet names a tailnet exposure, and exposure is not \"tailnet\".")
+                );
+            case null:
+                return;
+            case DeployEnvironment.Public:
+                throw new InvalidOperationException(
+                    problem(
+                        "exposure \"public\" is not offered yet. Use \"tailnet\", or leave exposure out and reach the "
+                            + "hub with kubectl port-forward."
+                    )
+                );
+            case DeployEnvironment.Tailnet:
+                break;
+            default:
+                throw new InvalidOperationException(
+                    problem($"exposure '{env.Exposure}' is not one trax renders. Use \"tailnet\".")
+                );
+        }
+        CheckTailnet(env, problem);
+    }
+
+    /// <summary>The names a tailnet exposure takes, and the ones it leaves the app.</summary>
+    private void CheckTailnet(DeployEnvironment env, Func<string, string> problem)
+    {
+        var podman = string.Equals(env.Runtime, DeployEnvironment.Podman, StringComparison.Ordinal);
+        var options = env.TailnetOptions ?? new DeployEnvironmentTailnet();
+        if (options.Hostname is { } host && !Dns1123Label.IsMatch(host))
+            throw new InvalidOperationException(
+                problem(
+                    $"tailnet.hostname '{host}' is not a machine name: at most 63 lower-case letters, digits and "
+                        + "dashes, starting and ending with a letter or digit."
+                )
+            );
+        if (options.OperatorNamespace is { } ns && (podman || !Dns1123Label.IsMatch(ns)))
+            throw new InvalidOperationException(
+                problem(
+                    podman
+                        ? "tailnet.operatorNamespace is for a cluster. Under podman the hub's pod runs its own "
+                            + "Tailscale sidecar."
+                        : $"tailnet.operatorNamespace '{ns}' is not a Kubernetes namespace name."
+                )
+            );
+        if (Services.ContainsKey(Kubernetes.KubernetesTailnet.EdgeName))
+            throw new InvalidOperationException(
+                problem(
+                    $"service '{Kubernetes.KubernetesTailnet.EdgeName}' takes the name of the proxy a tailnet "
+                        + "exposure runs. Rename the service."
+                )
+            );
+        // The listeners a cluster deploy applies and deletes again would take over a service of their name.
+        foreach (
+            var listener in new[]
+            {
+                Kubernetes.KubernetesTailnet.CanaryName,
+                Kubernetes.KubernetesTailnet.ControlName,
+            }
+        )
+            if (!podman && Services.ContainsKey(listener))
+                throw new InvalidOperationException(
+                    problem(
+                        $"service '{listener}' takes the name of a listener a tailnet deploy proves the edge's "
+                            + "network policy with. Rename the service."
+                    )
+                );
+        if (
+            podman
+            && Secrets.Contains(
+                Kubernetes.KubernetesTailnet.AuthKeySecretKey,
+                StringComparer.Ordinal
+            )
+        )
+            throw new InvalidOperationException(
+                problem(
+                    $"secrets lists {Kubernetes.KubernetesTailnet.AuthKeySecretKey}, which a tailnet exposure under "
+                        + "podman reads for its sidecar and never gives the app. Take it out of secrets; .env still "
+                        + "holds it."
+                )
+            );
     }
 
     /// <summary>
@@ -315,6 +445,80 @@ internal sealed partial class DeployFile
     }
 
     /// <summary>Refuses the fields only an aws environment reads.</summary>
+    /// <summary>
+    /// Checks the limits an environment sets on its backing services, and refuses a limit its target has no way to
+    /// apply: pids on aws and kubernetes (neither counts processes per container), any backing-service limit on aws
+    /// (it runs neither service), and a database limit on kubernetes when the database is not in the cluster.
+    /// </summary>
+    private void CheckEnvironmentLimits(DeployEnvironment env, Func<string, string> problem)
+    {
+        foreach (var (name, limits) in env.Limits)
+        {
+            if (name is not (BackingDatabase or BackingBroker))
+                throw new InvalidOperationException(
+                    problem(
+                        $"limits names '{name}', which is not a service trax runs beside the app. Use "
+                            + $"{BackingDatabase} or {BackingBroker}; a service of the app takes its limits in its "
+                            + "own entry under services."
+                    )
+                );
+            var limit = CheckLimits($"limits.{name}", limits.Memory, limits.Pids, limits.Cpus);
+            if (limit is not null)
+                throw new InvalidOperationException(problem(limit));
+        }
+        var aws = string.Equals(env.Target, DeployEnvironment.Aws, StringComparison.Ordinal);
+        var kubernetes = string.Equals(
+            env.Target,
+            DeployEnvironment.Kubernetes,
+            StringComparison.Ordinal
+        );
+        if (aws && env.Limits.Count > 0)
+            throw new InvalidOperationException(
+                problem(
+                    "limits are for compose and kubernetes. On aws the database is RDS, sized by the profile, and "
+                        + "there is no broker to limit."
+                )
+            );
+        if (aws || kubernetes)
+        {
+            var target = aws ? "aws (Fargate)" : "kubernetes";
+            foreach (var (service, entry) in Services)
+                if (entry.Pids is not null)
+                    throw new InvalidOperationException(
+                        problem(
+                            $"service '{service}' names pids, which {target} cannot apply: it has no "
+                                + "per-container process limit (on kubernetes it is the node's podPidsLimit). pids "
+                                + "is for compose; a file that also deploys to this target leaves it out."
+                        )
+                    );
+            foreach (var (name, limits) in env.Limits)
+                if (limits.Pids is not null)
+                    throw new InvalidOperationException(
+                        problem(
+                            $"limits.{name} names pids, which kubernetes cannot apply: it has no per-container "
+                                + "process limit."
+                        )
+                    );
+        }
+        if (
+            kubernetes
+            && env.Limits.ContainsKey(BackingDatabase)
+            && env.Database is not { InCluster: true }
+        )
+            throw new InvalidOperationException(
+                problem(
+                    $"limits.{BackingDatabase} is for a database trax runs in the cluster (\"database\": "
+                        + "{ \"inCluster\": true }); this environment's database is not one."
+                )
+            );
+    }
+
+    /// <summary>The name <c>limits</c> takes for the Postgres trax runs beside the app.</summary>
+    public const string BackingDatabase = "database";
+
+    /// <summary>The name <c>limits</c> takes for the RabbitMQ trax runs beside the app.</summary>
+    public const string BackingBroker = "rabbitmq";
+
     private static void NotForCloud(
         DeployEnvironment env,
         Func<string, string> problem,

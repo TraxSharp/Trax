@@ -10,9 +10,9 @@ using Trax.Effect.Configuration.Deploy;
 namespace Trax.Cli.Tests.UnitTests;
 
 /// <summary>
-/// An environment with <c>"target": "kubernetes"</c> becomes one Deployment per service (a hub at one copy with
-/// <c>Recreate</c>, workers rolling at their count), a ClusterIP Service per hub, and a migrate Job that runs before
-/// them, every container under the same hardening compose renders for that service, and no secret value anywhere:
+/// An environment with <c>"target": "kubernetes"</c> becomes one Deployment per service (a hub at one copy that rolls
+/// with its next copy beside it, workers rolling at their count), a ClusterIP Service per hub, and a migrate Job that
+/// runs before them, every container under the same hardening compose renders for that service, and no secret value anywhere:
 /// each comes from a Secret by reference. Postgres and RabbitMQ run in the cluster only off production. The file's
 /// environments each name their target; a version 1 file's are aws. Holds the Kubernetes target to
 /// <c>Trax.Docs/adr/0062</c>.
@@ -146,7 +146,7 @@ public partial class DeployKubernetesTests
         deployments["hub"].Spec.Replicas.Should().Be(1);
         deployments["hub"]
             .Spec.Strategy.Type.Should()
-            .Be("Recreate", "the old hub stops before the new one starts");
+            .Be("RollingUpdate", "the new hub starts beside the old one, after the deploy drained");
         deployments["worker"].Spec.Strategy.Type.Should().Be("RollingUpdate");
         deployments["worker"]
             .Spec.Replicas.Should()
@@ -167,13 +167,17 @@ public partial class DeployKubernetesTests
             .Should()
             .Equal(
                 "Namespace",
+                "NetworkPolicy",
+                "NetworkPolicy",
                 "Service",
                 "StatefulSet",
+                "Job",
                 "Job",
                 "Service",
                 "Deployment",
                 "Deployment",
-                "Deployment"
+                "Deployment",
+                "Job"
             );
     }
 
@@ -195,11 +199,33 @@ public partial class DeployKubernetesTests
     }
 
     [Test]
+    public void RabbitMQ_runs_as_its_own_user_with_no_capability()
+    {
+        var m = Render(exports: Exports(rabbit: true));
+
+        var security = Pods(m)
+            .Select(p => p.Spec.Containers.Single())
+            .Single(c => c.Name is "rabbitmq")
+            .SecurityContext;
+
+        // Started as root, its readiness probe can write the Erlang cookie before the server, which then cannot read it.
+        security.RunAsNonRoot.Should().BeTrue();
+        security.RunAsUser.Should().Be(999);
+        security.RunAsGroup.Should().Be(999);
+        security.Capabilities.Drop.Should().Equal("ALL");
+        security.Capabilities.Add.Should().BeNull();
+    }
+
+    [Test]
     public void Every_container_runs_hardened_in_a_user_namespace_of_its_own()
     {
         var m = Render(exports: Exports(rabbit: true));
         var pods = Pods(m).ToList();
-        pods.Should().HaveCount(1 + 1 + 1 + 3, "database, rabbitmq, migrate and three services");
+        pods.Should()
+            .HaveCount(
+                1 + 1 + 3 + 3,
+                "database, rabbitmq, migrate, drain, resume and three services"
+            );
 
         foreach (var pod in pods)
         {
@@ -215,13 +241,30 @@ public partial class DeployKubernetesTests
                 ]
                 .Should()
                 .Be("runtime/default", "podman kube play reads the annotation, not the field");
-            MiB(container.Resources.Limits["memory"]).Should().BeGreaterThan(0);
-            MiB(container.Resources.Requests["memory"])
-                .Should()
-                .Be(MiB(container.Resources.Limits["memory"]));
-            security
-                .RunAsNonRoot.Should()
-                .Be(container.Name is not ("database" or "rabbitmq"), container.Name);
+            if (container.Resources is { } resources)
+                MiB(resources.Requests["memory"])
+                    .Should()
+                    .Be(MiB(resources.Limits["memory"]), container.Name);
+            var trax = container.Name is not ("database" or "rabbitmq");
+            security.ReadOnlyRootFilesystem.Should().Be(trax ? true : null, container.Name);
+            if (trax)
+            {
+                container
+                    .VolumeMounts.Should()
+                    .ContainSingle(v =>
+                        string.Equals(v.MountPath, "/tmp", StringComparison.Ordinal)
+                    );
+                pod.Spec.Volumes.Should()
+                    .ContainSingle(v =>
+                        string.Equals(
+                            v.Name,
+                            KubernetesTarget.ScratchVolume,
+                            StringComparison.Ordinal
+                        )
+                        && v.EmptyDir != null
+                    );
+            }
+            security.RunAsNonRoot.Should().Be(container.Name is not "database", container.Name);
         }
         MiB(
                 Deployments(m)["worker"].Spec.Template.Spec.Containers.Single().Resources.Limits[
@@ -254,20 +297,34 @@ public partial class DeployKubernetesTests
                 .TakeWhile(l => l.StartsWith("      - ", StringComparison.Ordinal))
                 .Select(l => l["      - ".Length..])
                 .ToList();
+            // RabbitMQ is the one difference: here it runs as its image's own user and needs none back
+            // (RabbitMQ_runs_as_its_own_user_with_no_capability).
             (container.SecurityContext.Capabilities.Add ?? [])
                 .Should()
-                .Equal(composeAdds, container.Name);
-            var composeMemory = MemLimit.Match(block).Groups["mib"].Value;
-            MiB(container.Resources.Limits["memory"])
-                .ToString(System.Globalization.CultureInfo.InvariantCulture)
-                .Should()
-                .Be(composeMemory, container.Name);
+                .Equal(container.Name is "rabbitmq" ? [] : composeAdds, container.Name);
+            var composeMemory = MemLimit.Match(block);
+            if (composeMemory.Success)
+                MiB(container.Resources.Limits["memory"])
+                    .ToString(System.Globalization.CultureInfo.InvariantCulture)
+                    .Should()
+                    .Be(composeMemory.Groups["mib"].Value, container.Name);
+            else
+                container.Resources.Should().BeNull(container.Name);
             block.Should().Contain("      - ALL\n", "compose drops every capability too");
         }
         containers
             .Select(c => c.Name)
             .Should()
-            .BeEquivalentTo(["database", "rabbitmq", "migrate", "hub", "worker", "reports"]);
+            .BeEquivalentTo([
+                "database",
+                "rabbitmq",
+                "migrate",
+                "drain",
+                "hub",
+                "worker",
+                "reports",
+                "resume",
+            ]);
     }
 
     private static string Block(string compose, string service)
@@ -347,7 +404,7 @@ public partial class DeployKubernetesTests
         container.Image.Should().Be("postgres:17");
         container
             .SecurityContext.Capabilities.Add.Should()
-            .Equal(ServiceHardening.Database.AddCapabilities);
+            .Equal(ServiceHardening.Database(limits: null).AddCapabilities);
         set.Spec.VolumeClaimTemplates.Single().Metadata.Name.Should().Be("data");
     }
 
@@ -758,13 +815,56 @@ public partial class DeployKubernetesTests
             .Order(StringComparer.Ordinal)
             .ToList();
         files[0].Should().Be("00-namespace-orders-staging.yaml");
-        files.Should().Contain("05-deployment-hub.yaml");
-        (await File.ReadAllTextAsync(Path.Combine(dir, "05-deployment-hub.yaml")))
+        files.Should().Contain("08-deployment-hub.yaml");
+        (await File.ReadAllTextAsync(Path.Combine(dir, "08-deployment-hub.yaml")))
             .Should()
             .Contain("kind: Deployment")
-            .And.Contain("type: Recreate")
+            .And.Contain("type: RollingUpdate")
+            .And.Contain("maxUnavailable: 0")
             .And.Contain("hostUsers: false")
             .And.Contain("secretKeyRef:");
+    }
+
+    [Test]
+    public async Task Plan_keeps_a_space_between_a_long_kind_and_its_name()
+    {
+        var file = File_();
+        file.Services["hub"].Egress = [];
+        file.EgressImage = "ghcr.io/traxsharp/trax-egress@sha256:" + new string('a', 64);
+        var path = await WriteAsync(file);
+        var stdout = new StringWriter();
+        DeployKubernetesCommands.Client = () =>
+            throw new InvalidOperationException("plan reached for a cluster");
+        try
+        {
+            (
+                await DeployAwsCommands.PlanAsync(
+                    path,
+                    "staging",
+                    new Exporter(Exports(), _dir),
+                    stdout,
+                    TextWriter.Null,
+                    CancellationToken.None
+                )
+            )
+                .Should()
+                .Be(0);
+        }
+        finally
+        {
+            DeployKubernetesCommands.Client = () =>
+                new KubernetesDeployClient(DeployKubernetesCommands.Clock);
+        }
+
+        var lines = stdout.ToString().ReplaceLineEndings("\n").Split('\n');
+        lines
+            .Should()
+            .Contain(l =>
+                l.StartsWith("  ValidatingAdmissionPolicyBinding ", StringComparison.Ordinal)
+            );
+        lines
+            .Should()
+            .Contain(l => l.StartsWith("  ValidatingAdmissionPolicy ", StringComparison.Ordinal));
     }
 
     private async Task<string> WriteAsync(DeployFile file)

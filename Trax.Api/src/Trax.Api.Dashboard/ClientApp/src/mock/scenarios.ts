@@ -1024,6 +1024,31 @@ export const schedulerConfigScenario: MockSchemaOverrides = {
   }),
 };
 
+// The scheduler page with a drain's busy list: two runs and an instance still busy, out of 53.
+export const drainBusyScenario: MockSchemaOverrides = {
+  resolvers: () => {
+    const base = (schedulerConfigScenario.resolvers as () => Record<string, Record<string, () => unknown>>)();
+    return {
+      ...base,
+      ConfigQueries: {
+        ...base.ConfigQueries,
+        drain: () => ({
+          drained: false,
+          until: null,
+          startedAt: null,
+          startedBy: null,
+          busy: [
+            { kind: "run", id: "4101", name: "Trax.Demo.ISettleTrain", state: "InProgress", since: "2026-07-07T11:58:00.000Z", host: "hub-7c9d" },
+            { kind: "run", id: "4102", name: "Trax.Demo.IExportTrain", state: "Pending", since: "2026-07-07T11:59:00.000Z", host: null },
+            { kind: "instance", id: "checkout/0f3e", name: "checkout", state: "Charging, effect Charge in flight", since: "2026-07-07T11:59:30.000Z", host: null },
+          ],
+          busyTotal: 53,
+        }),
+      },
+    };
+  },
+};
+
 // ── Trains registry ──────────────────────────────────────────────────────
 const TRAIN_ROWS = [
   { fullName: "Trax.Trains.ZebraTrain", serviceTypeName: "Trax.Trains.ZebraTrain", implementationTypeName: "Trax.Trains.ZebraTrainImpl", inputTypeName: "Trax.Trains.ZebraInput", outputTypeName: "Unit", lifetime: "Scoped", isQuery: false, isMutation: true, graphQLName: "zebra", isBroadcastEnabled: false, hasQueueSubjectKey: true, requiredRoles: [], requiredPolicies: [], inputSchema: [{ name: "playerId", typeName: "String", isNullable: false, enumValues: null }, { name: "amount", typeName: "Int32", isNullable: true, enumValues: null }, { name: "tier", typeName: "PlayerTier", isNullable: false, enumValues: ["Bronze", "Silver", "Gold"] }, { name: "notify", typeName: "Boolean", isNullable: false, enumValues: null }] },

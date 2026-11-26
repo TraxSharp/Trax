@@ -24,7 +24,8 @@ internal sealed class EksDeployer(
         string environment,
         IReadOnlyDictionary<string, DeployManifest> exports,
         string tag,
-        CancellationToken ct
+        CancellationToken ct,
+        bool force = false
     )
     {
         var env = file.Environment(environment);
@@ -72,10 +73,11 @@ internal sealed class EksDeployer(
             Output(outputs, "DatabaseSecretArn"),
             Output(outputs, "DatabaseClientSecurityGroup"),
             found.ClusterSecurityGroup,
-            PodSecurityGroups: !nodes
+            PodSecurityGroups: !nodes,
+            Output(outputs, AwsStack.SecretsManagerEndpointOutput)
         );
         await new KubernetesDeployer(cluster, NoImages.Instance, say)
-            .DeployAsync(file, filePath, environment, exports, tag, ct, eksTarget)
+            .DeployAsync(file, filePath, environment, exports, tag, ct, eksTarget, force)
             .ConfigureAwait(false);
     }
 

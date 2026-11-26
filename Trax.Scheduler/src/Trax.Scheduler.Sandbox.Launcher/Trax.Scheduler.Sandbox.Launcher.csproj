@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Description>The sandbox launcher for Trax .NET: the one process that may start sandboxes: a fresh gVisor container per run under rootless podman on one host, or a Job per run on Kubernetes, k3s on one machine included, with a Kata Containers RuntimeClass, a microVM per run. Podman cannot run Kata. A hub asks it over a signed channel with a fixed request shape; it passes the input in, reads the output volume after the sandbox exits, checks it, and hands it back. Run it as its own deployment.</Description>
+    <AssemblyName>Trax.Scheduler.Sandbox.Launcher</AssemblyName>
+    <!-- New package: nothing on nuget.org to validate against yet. Remove once it has shipped. -->
+    <EnablePackageValidation>false</EnablePackageValidation>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Trax.Scheduler/Trax.Scheduler.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="KubernetesClient" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Scheduler.Sandbox.Tests" />
+  </ItemGroup>
+</Project>

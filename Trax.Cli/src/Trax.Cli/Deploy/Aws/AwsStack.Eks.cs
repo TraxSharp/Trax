@@ -8,6 +8,9 @@ internal static partial class AwsStack
     /// <summary>The foundation output naming the role a kubernetes environment's pods assume through Pod Identity.</summary>
     public const string PodRoleOutput = "PodRoleArn";
 
+    /// <summary>The foundation output naming the DNS name of a kubernetes environment's Secrets Manager endpoint.</summary>
+    public const string SecretsManagerEndpointOutput = "SecretsManagerEndpoint";
+
     /// <summary>
     /// The foundation of a kubernetes environment on EKS: the same network, database and secrets an ECS runtime gets,
     /// and for the pods a role they assume through EKS Pod Identity, which may read only this environment's secrets,
@@ -43,6 +46,7 @@ internal static partial class AwsStack
 
         resources["PodRole"] = PodRole(file, stack);
         outputs[PodRoleOutput] = Output(GetAtt("PodRole", "Arn"));
+        AddSecretsManagerEndpoint(resources, outputs, stack);
         foreach (var service in file.Services.Keys)
             resources[$"{LogicalId(service)}PodIdentity"] = Resource(
                 "AWS::EKS::PodIdentityAssociation",
@@ -69,6 +73,100 @@ internal static partial class AwsStack
             );
         return template;
     }
+
+    /// <summary>
+    /// An interface endpoint for Secrets Manager in the foundation's service subnets, which the pods read their secrets
+    /// through. Secrets Manager's public addresses serve every account, so a pod held to an egress list that allowed
+    /// them could reach any account's secrets with credentials of its own; the endpoint's policy lets only this
+    /// account's principals read this account's secrets. Its own DNS name (the output) resolves to its private
+    /// addresses alone, and the held pods are allowed that name. Private DNS stays off: it would send every workload in
+    /// the VPC through this policy, and a VPC holds one such zone per service, so a second environment in the same VPC
+    /// could not create its endpoint.
+    /// </summary>
+    private static void AddSecretsManagerEndpoint(
+        JsonObject resources,
+        JsonObject outputs,
+        string stack
+    )
+    {
+        var vpc = outputs["VpcId"].NotNull()["Value"].NotNull();
+        var cidr = outputs["VpcCidr"].NotNull()["Value"].NotNull();
+        var subnets = outputs["ServiceSubnets"].NotNull()["Value"].NotNull();
+        var group = SecurityGroup(
+            stack,
+            vpc,
+            "Secrets Manager endpoint",
+            [Rule("-1", from: null, to: null, cidr: "127.0.0.1/32", description: "No egress")]
+        );
+        ((JsonObject)group["Properties"].NotNull())["SecurityGroupIngress"] = new JsonArray(
+            Rule("tcp", 443, 443, cidr: cidr.GetValue<string>(), description: "The VPC")
+        );
+        resources["SecretsManagerEndpointSecurityGroup"] = group;
+        resources["SecretsManagerEndpoint"] = Resource(
+            "AWS::EC2::VPCEndpoint",
+            new JsonObject
+            {
+                ["VpcEndpointType"] = "Interface",
+                ["ServiceName"] = Sub("com.amazonaws.${AWS::Region}.secretsmanager"),
+                ["VpcId"] = vpc.DeepClone(),
+                ["SubnetIds"] = new JsonObject
+                {
+                    ["Fn::Split"] = new JsonArray(",", subnets.DeepClone()),
+                },
+                ["SecurityGroupIds"] = new JsonArray(Ref("SecretsManagerEndpointSecurityGroup")),
+                ["PrivateDnsEnabled"] = false,
+                ["PolicyDocument"] = ThisAccountsSecrets(),
+            }
+        );
+        outputs[SecretsManagerEndpointOutput] = Output(EndpointName("SecretsManagerEndpoint"));
+    }
+
+    /// <summary>An endpoint policy that lets only this account's principals read this account's secrets.</summary>
+    private static JsonObject ThisAccountsSecrets() =>
+        new JsonObject
+        {
+            ["Version"] = "2012-10-17",
+            ["Statement"] = new JsonArray(
+                new JsonObject
+                {
+                    ["Effect"] = "Allow",
+                    ["Principal"] = "*",
+                    ["Action"] = new JsonArray("secretsmanager:GetSecretValue"),
+                    ["Resource"] = Sub(
+                        "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:*"
+                    ),
+                    ["Condition"] = new JsonObject
+                    {
+                        ["StringEquals"] = new JsonObject
+                        {
+                            ["aws:PrincipalAccount"] = Ref("AWS::AccountId"),
+                        },
+                    },
+                }
+            ),
+        };
+
+    /// <summary>
+    /// The regional DNS name of interface endpoint <paramref name="endpoint"/>. Each of its DNS entries is
+    /// "&lt;hosted zone&gt;:&lt;name&gt;", the regional one first.
+    /// </summary>
+    private static JsonObject EndpointName(string endpoint) =>
+        new()
+        {
+            ["Fn::Select"] = new JsonArray(
+                1,
+                new JsonObject
+                {
+                    ["Fn::Split"] = new JsonArray(
+                        ":",
+                        new JsonObject
+                        {
+                            ["Fn::Select"] = new JsonArray(0, GetAtt(endpoint, "DnsEntries")),
+                        }
+                    ),
+                }
+            ),
+        };
 
     /// <summary>
     /// The role the pods assume: trusted only by EKS Pod Identity, and allowed only to read the database's secret and

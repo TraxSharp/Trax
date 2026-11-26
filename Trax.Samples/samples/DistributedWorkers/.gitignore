@@ -1,0 +1,6 @@
+# What trax deploy writes beside trax.deploy.json: the podman units and manifests it renders, and the
+# .env a podman environment reads its secret values from.
+.trax/
+.env
+# What Trax.Samples/scripts/recordings/deploy.sh writes beside trax.deploy.json while it records.
+trax.deploy.rec-*.json

@@ -95,6 +95,19 @@ namespace Trax.Scheduler.Configuration
         public Trax.Scheduler.Configuration.SubmitterRouting Routing { get; init; }
         public System.Type SubmitterType { get; init; }
     }
+    public sealed class SandboxClientOptions
+    {
+        public const long DefaultMaxResponseBodyBytes = 245825536;
+        public SandboxClientOptions() { }
+        public bool AllowInsecureTransport { get; set; }
+        public Trax.Scheduler.Services.Sandbox.SandboxArchiveLimits Archive { get; set; }
+        public string? LauncherSocketPath { get; set; }
+        public string? LauncherUrl { get; set; }
+        public long MaxResponseBodyBytes { get; set; }
+        public System.TimeSpan ResponseGrace { get; set; }
+        public byte[]? SigningKey { get; set; }
+        public void Validate() { }
+    }
     public class ScheduleOptions
     {
         public ScheduleOptions() { }
@@ -287,6 +300,12 @@ namespace Trax.Scheduler.Extensions
         public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddTraxJobRunner(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, System.Action<Trax.Scheduler.Configuration.TraxJobRunnerOptions> configure) { }
         public static Microsoft.AspNetCore.Builder.RouteHandlerBuilder UseTraxJobRunner(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints, string route = "/trax/execute") { }
         public static Microsoft.AspNetCore.Builder.RouteHandlerBuilder UseTraxRunEndpoint(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints, string route = "/trax/run") { }
+    }
+    public static class SandboxExtensions
+    {
+        public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddTraxSandbox(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, System.Action<Trax.Scheduler.Configuration.SandboxClientOptions> configure) { }
+        public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddTraxSandboxRunner(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, string root = "/sandbox", string scratch = "/tmp") { }
+        public static System.Threading.Tasks.Task<int> RunTraxSandboxAsync(this System.IServiceProvider services, System.Threading.CancellationToken ct = default) { }
     }
     public static class SchedulerBuilderOrderExtensions
     {
@@ -634,6 +653,26 @@ namespace Trax.Scheduler.Services.Operations
         public bool IsHighlighted { get; init; }
         public string Name { get; init; }
     }
+    public class DrainBusyWork : System.IEquatable<Trax.Scheduler.Services.Operations.DrainBusyWork>
+    {
+        public DrainBusyWork(string Kind, string Id, string Name, string State, System.DateTime Since, string? Host) { }
+        public string? Host { get; init; }
+        public string Id { get; init; }
+        public string Kind { get; init; }
+        public string Name { get; init; }
+        public System.DateTime Since { get; init; }
+        public string State { get; init; }
+    }
+    public class DrainStatus : System.IEquatable<Trax.Scheduler.Services.Operations.DrainStatus>
+    {
+        public DrainStatus(bool Drained, System.DateTime? Until, System.DateTime? StartedAt, string? StartedBy, System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Operations.DrainBusyWork> Busy, int BusyTotal) { }
+        public System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Operations.DrainBusyWork> Busy { get; init; }
+        public int BusyTotal { get; init; }
+        public bool Drained { get; init; }
+        public System.DateTime? StartedAt { get; init; }
+        public string? StartedBy { get; init; }
+        public System.DateTime? Until { get; init; }
+    }
     public class ExecutionsBucket : System.IEquatable<Trax.Scheduler.Services.Operations.ExecutionsBucket>
     {
         public ExecutionsBucket(System.DateTime Timestamp, int Completed, int Failed, int Cancelled) { }
@@ -652,8 +691,11 @@ namespace Trax.Scheduler.Services.Operations
         System.Threading.Tasks.Task<int> CountLogsAsync(Trax.Scheduler.Services.Operations.LogQuery query, System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.LogCount> CountLogsCappedAsync(Trax.Scheduler.Services.Operations.LogQuery query, System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.MachineInstanceTotal> CountMachineInstancesAsync(Trax.Scheduler.Services.Operations.MachineInstanceQuery query, System.Threading.CancellationToken ct);
+        System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> DrainAsync(System.TimeSpan? duration, string startedBy, System.Threading.CancellationToken ct);
+        System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> EndDrainAsync(System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.Attention> GetAttentionAsync(System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.DashboardMetrics> GetDashboardMetricsAsync(Trax.Scheduler.Services.Operations.MetricsRange range, bool hideAdminTrains, System.Threading.CancellationToken ct);
+        System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.DrainStatus> GetDrainAsync(System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.ManifestGroupDependencyGraph> GetGlobalManifestGroupGraphAsync(System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.LogPage> GetLogsAsync(Trax.Scheduler.Services.Operations.LogQuery query, System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.MachineBoardDescription?> GetMachineBoardAsync(string machine, System.Threading.CancellationToken ct);
@@ -1093,7 +1135,9 @@ namespace Trax.Scheduler.Services.Operations
         public const string UserOwnedRunCancelRefusal = "A run a step of a user\'s state-machine draft started is read-only to operators: i" +
             "t is cancelled only when its user leaves the state through one of the machine\'s " +
             "own transitions.";
+        public static readonly System.TimeSpan DefaultDrainDuration;
         public static readonly System.TimeSpan MachineInstanceCountCacheDuration;
+        public static readonly System.TimeSpan MinimumDrainDuration;
         public OperationsService(Trax.Mediator.Services.TrainDiscovery.ITrainDiscoveryService discoveryService, Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory, Trax.Scheduler.Configuration.SchedulerConfiguration schedulerConfiguration, Trax.Mediator.Services.TrainExecution.ITrainExecutionService trainExecution, Trax.Scheduler.Configuration.LocalWorkerOptions? localWorkerOptions, Trax.Effect.Services.ChangeSignal.ITraxChangeSignal? changeSignal) { }
         public OperationsService(Trax.Mediator.Services.TrainDiscovery.ITrainDiscoveryService discoveryService, Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory, Trax.Scheduler.Configuration.SchedulerConfiguration schedulerConfiguration, Trax.Mediator.Services.TrainExecution.ITrainExecutionService trainExecution, Trax.Scheduler.Configuration.LocalWorkerOptions? localWorkerOptions = null, Trax.Effect.Services.ChangeSignal.ITraxChangeSignal? changeSignal = null, Microsoft.Extensions.Logging.ILogger<Trax.Scheduler.Services.Operations.OperationsService>? logger = null) { }
         public OperationsService(Trax.Mediator.Services.TrainDiscovery.ITrainDiscoveryService discoveryService, Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory, Trax.Scheduler.Configuration.SchedulerConfiguration schedulerConfiguration, Trax.Mediator.Services.TrainExecution.ITrainExecutionService trainExecution, System.IServiceProvider services, Trax.Scheduler.Configuration.LocalWorkerOptions? localWorkerOptions = null, Trax.Effect.Services.ChangeSignal.ITraxChangeSignal? changeSignal = null, Microsoft.Extensions.Logging.ILogger<Trax.Scheduler.Services.Operations.OperationsService>? logger = null) { }
@@ -1105,8 +1149,11 @@ namespace Trax.Scheduler.Services.Operations
         public System.Threading.Tasks.Task<int> CountLogsAsync(Trax.Scheduler.Services.Operations.LogQuery query, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.LogCount> CountLogsCappedAsync(Trax.Scheduler.Services.Operations.LogQuery query, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.MachineInstanceTotal> CountMachineInstancesAsync(Trax.Scheduler.Services.Operations.MachineInstanceQuery query, System.Threading.CancellationToken ct) { }
+        public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> DrainAsync(System.TimeSpan? duration, string startedBy, System.Threading.CancellationToken ct) { }
+        public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> EndDrainAsync(System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.Attention> GetAttentionAsync(System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.DashboardMetrics> GetDashboardMetricsAsync(Trax.Scheduler.Services.Operations.MetricsRange range, bool hideAdminTrains, System.Threading.CancellationToken ct) { }
+        public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.DrainStatus> GetDrainAsync(System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.ManifestGroupDependencyGraph> GetGlobalManifestGroupGraphAsync(System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.LogPage> GetLogsAsync(Trax.Scheduler.Services.Operations.LogQuery query, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.MachineBoardDescription?> GetMachineBoardAsync(string machine, System.Threading.CancellationToken ct) { }
@@ -1484,6 +1531,147 @@ namespace Trax.Scheduler.Services.RunExecutor
         public string? PublicMessage { get; init; }
         public string? StackTrace { get; init; }
         public Trax.Core.Exceptions.TrainException ToTrainException() { }
+    }
+}
+namespace Trax.Scheduler.Services.Sandbox
+{
+    public interface ITraxSandbox
+    {
+        System.Threading.Tasks.Task<Trax.Scheduler.Services.Sandbox.SandboxRun<TOutput>> RunAsync<TTrain, TInput, TOutput>(TInput input, System.Threading.CancellationToken ct = default)
+            where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput>
+            where TInput :  notnull;
+    }
+    public static class SandboxArchive
+    {
+        [return: System.Runtime.CompilerServices.TupleElementNames(new string[] {
+                "Files",
+                "Refused"})]
+        public static System.Threading.Tasks.Task<System.ValueTuple<System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Sandbox.SandboxFile>, string?>> ReadAsync(System.IO.Stream tar, Trax.Scheduler.Services.Sandbox.SandboxArchiveLimits limits, string prefix, System.Threading.CancellationToken ct) { }
+        public static System.Threading.Tasks.Task<byte[]> WriteAsync(System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Sandbox.SandboxFile> files, System.Threading.CancellationToken ct) { }
+    }
+    public sealed class SandboxArchiveLimits : System.IEquatable<Trax.Scheduler.Services.Sandbox.SandboxArchiveLimits>
+    {
+        public const int MaxPathLength = 1024;
+        public const int OverheadPerEntry = 4096;
+        public SandboxArchiveLimits(long MaxBytes, int MaxFiles) { }
+        public long MaxBytes { get; init; }
+        public int MaxFiles { get; init; }
+        public long MaxRawBytes { get; }
+    }
+    public sealed class SandboxCanaryReport : System.IEquatable<Trax.Scheduler.Services.Sandbox.SandboxCanaryReport>
+    {
+        public SandboxCanaryReport(string Kernel, System.Collections.Generic.IReadOnlyList<string> Interfaces, System.Collections.Generic.IReadOnlyList<string> Reached) { }
+        public System.Collections.Generic.IReadOnlyList<string> Interfaces { get; init; }
+        public string Kernel { get; init; }
+        public System.Collections.Generic.IReadOnlyList<string> Reached { get; init; }
+    }
+    public sealed class SandboxCanaryRequest : System.IEquatable<Trax.Scheduler.Services.Sandbox.SandboxCanaryRequest>
+    {
+        public SandboxCanaryRequest(System.Collections.Generic.IReadOnlyList<string> Probes) { }
+        public System.Collections.Generic.IReadOnlyList<string> Probes { get; init; }
+    }
+    public static class SandboxChannelSignature
+    {
+        public const string HeaderName = "Trax-Sandbox-Signature";
+        public const int MinimumKeyLength = 32;
+        public const string ResponseHeaderName = "Trax-Sandbox-Response-Signature";
+        public static void EnsureKey(byte[]? key, string paramName) { }
+        public static string Sign(byte[] key, System.ReadOnlySpan<byte> body, System.TimeProvider time) { }
+        public static string Sign(byte[] key, System.ReadOnlySpan<byte> body, long timestamp, string nonce) { }
+        public static string? SignResponse(byte[] key, string? requestSignature, System.ReadOnlySpan<byte> body) { }
+        public static bool TryReadTimestamp(string? signature, out long timestamp) { }
+        public static bool TryVerify(byte[] key, System.ReadOnlySpan<byte> body, string? signature, out long timestamp, out string nonce) { }
+        public static bool VerifyResponse(byte[] key, string requestSignature, string? responseSignature, System.ReadOnlySpan<byte> body) { }
+    }
+    public sealed class SandboxFile : System.IEquatable<Trax.Scheduler.Services.Sandbox.SandboxFile>
+    {
+        public SandboxFile(string Path, System.ReadOnlyMemory<byte> Content) { }
+        public System.ReadOnlyMemory<byte> Content { get; init; }
+        public string Path { get; init; }
+    }
+    public static class SandboxJson
+    {
+        public static readonly System.Text.Json.JsonSerializerOptions Options;
+    }
+    public sealed class SandboxLimits : System.IEquatable<Trax.Scheduler.Services.Sandbox.SandboxLimits>
+    {
+        public SandboxLimits(int CpuMillicores, int MemoryMiB, int DiskMiB, int TimeoutSeconds) { }
+        public int CpuMillicores { get; init; }
+        public int DiskMiB { get; init; }
+        public int MemoryMiB { get; init; }
+        public int TimeoutSeconds { get; init; }
+        public string? Invalid() { }
+    }
+    public enum SandboxOutcome
+    {
+        Completed = 0,
+        Refused = 1,
+        Busy = 2,
+        TimedOut = 3,
+        OutOfMemory = 4,
+        Exited = 5,
+        OutputRefused = 6,
+        Failed = 7,
+    }
+    public static class SandboxPaths
+    {
+        public const string CanaryFile = "canary.json";
+        public const string CanaryReportFile = "canary-report.json";
+        public const string Files = "files";
+        public const string Input = "in";
+        public const string Output = "out";
+        public const string RequestFile = "request.json";
+        public const string ResultFile = "result.json";
+        public const string Root = "/sandbox";
+        public const string Scratch = "/tmp";
+    }
+    public sealed class SandboxRunException : Trax.Core.Exceptions.TrainException
+    {
+        public SandboxRunException(Trax.Scheduler.Services.Sandbox.SandboxOutcome outcome, string message) { }
+        public Trax.Scheduler.Services.Sandbox.SandboxOutcome Outcome { get; }
+    }
+    public sealed class SandboxRunRequest : System.IEquatable<Trax.Scheduler.Services.Sandbox.SandboxRunRequest>
+    {
+        public SandboxRunRequest(string RunId, string Profile, string TrainName, string InputJson, Trax.Scheduler.Services.Sandbox.SandboxLimits Limits) { }
+        public string InputJson { get; init; }
+        public Trax.Scheduler.Services.Sandbox.SandboxLimits Limits { get; init; }
+        public string Profile { get; init; }
+        public string RunId { get; init; }
+        public string TrainName { get; init; }
+    }
+    public sealed class SandboxRunResponse : System.IEquatable<Trax.Scheduler.Services.Sandbox.SandboxRunResponse>
+    {
+        public SandboxRunResponse(string RunId, Trax.Scheduler.Services.Sandbox.SandboxOutcome Outcome, string? Reason = null, string? ResultJson = null, string? Archive = null) { }
+        public string? Archive { get; init; }
+        public Trax.Scheduler.Services.Sandbox.SandboxOutcome Outcome { get; init; }
+        public string? Reason { get; init; }
+        public string? ResultJson { get; init; }
+        public string RunId { get; init; }
+    }
+    public sealed class SandboxRun<TOutput> : System.IEquatable<Trax.Scheduler.Services.Sandbox.SandboxRun<TOutput>>
+    {
+        public SandboxRun(TOutput? Output, System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Sandbox.SandboxFile> Files) { }
+        public System.Collections.Generic.IReadOnlyList<Trax.Scheduler.Services.Sandbox.SandboxFile> Files { get; init; }
+        public TOutput Output { get; init; }
+    }
+    public sealed class SandboxWorkspace
+    {
+        public SandboxWorkspace(string root, string scratch) { }
+        public string FilesDirectory { get; }
+        public string InputDirectory { get; }
+        public string OutputDirectory { get; }
+        public string ScratchDirectory { get; }
+    }
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=false, Inherited=false)]
+    public sealed class TraxSandboxAttribute : System.Attribute
+    {
+        public TraxSandboxAttribute(string profile, int cpuMillicores, int memoryMiB, int diskMiB, int timeoutSeconds) { }
+        public int CpuMillicores { get; }
+        public int DiskMiB { get; }
+        public Trax.Scheduler.Services.Sandbox.SandboxLimits Limits { get; }
+        public int MemoryMiB { get; }
+        public string Profile { get; }
+        public int TimeoutSeconds { get; }
     }
 }
 namespace Trax.Scheduler.Services.SchedulerLiveness

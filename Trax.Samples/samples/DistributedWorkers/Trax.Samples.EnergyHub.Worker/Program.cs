@@ -21,6 +21,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 using Trax.Effect.Broadcaster.RabbitMQ.Extensions;
+using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.JunctionProvider.Progress.Extensions;
@@ -35,10 +36,6 @@ var builder = WebApplication.CreateBuilder(args);
 var connectionString =
     builder.Configuration.GetConnectionString("TraxDatabase")
     ?? throw new InvalidOperationException("Connection string 'TraxDatabase' not found.");
-
-var rabbitMqConnectionString =
-    builder.Configuration.GetConnectionString("RabbitMQ")
-    ?? throw new InvalidOperationException("Connection string 'RabbitMQ' not found.");
 
 builder.Services.AddLogging(logging => logging.AddConsole());
 
@@ -61,8 +58,11 @@ builder.Services.AddTrax(trax =>
                 .SaveTrainParameters()
                 .AddJunctionProgress()
                 .UseBroadcaster(b =>
+                    // ConnectionStrings:RabbitMQ in Development; RabbitMQ:Host and its user and
+                    // password where trax deploy runs the broker (BrokerTransport says why that one
+                    // may be plain AMQP).
                     b.UseRabbitMq(
-                        rabbitMqConnectionString,
+                        builder.Configuration,
                         o =>
                         {
                             o.ExchangeName = LifecycleEvents.ExchangeName;
@@ -71,7 +71,11 @@ builder.Services.AddTrax(trax =>
                                 builder.Configuration,
                                 builder.Environment.IsDevelopment()
                             );
-                        }
+                            o.AllowInsecureTransport = BrokerTransport.AllowsCleartext(
+                                builder.Configuration
+                            );
+                        },
+                        name: BrokerTransport.Name
                     )
                 )
         )
@@ -93,7 +97,9 @@ builder.Services.AddTraxWorker(opts =>
 
 var app = builder.Build();
 
-await app.RunAsync().ConfigureAwait(false);
+// Serves; or, when trax deploy starts it for a step, reports what it needs (--trax-export-deploy),
+// migrates (--trax-migrate) or drains and resumes the hosts (--trax-drain, --trax-resume) and exits.
+await app.RunTraxAsync(args).ConfigureAwait(false);
 
 namespace Trax.Samples.EnergyHub.Worker
 {

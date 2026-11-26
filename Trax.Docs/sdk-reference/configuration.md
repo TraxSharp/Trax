@@ -50,7 +50,9 @@ each member ships in.
 - [SkipMigrations](/docs/sdk-reference/configuration/skip-migrations) (`Trax.Effect.Data.Postgres`): turns off the startup migration
 - [DatabaseMigrator](/docs/sdk-reference/configuration/database-migrator) (`Trax.Effect.Data.Postgres`): applies the Postgres schema
 - [TraxMigrate](/docs/sdk-reference/configuration/trax-migrate) (`Trax.Effect.Data`): `--trax-migrate`, `TRAX_MIGRATIONS` and `MigrateOnDeploy`, the migrate step of a deployment
+- [TraxDrain](/docs/sdk-reference/configuration/trax-drain) (`Trax.Effect.Data`): `--trax-drain`, `--trax-resume` and `TRAX_DRAIN_FORCE`, the drain step of a deployment, and the `trax.drain` row
 - [DeployManifest](/docs/sdk-reference/configuration/deploy-manifest) (`Trax.Effect`): `--trax-export-deploy` and the manifest `trax deploy` reads
+- [DeployExposure](/docs/sdk-reference/configuration/deploy-exposure) (`Trax.Effect`): what `trax deploy` tells a hub about how it is reached, and its proxy's secret
 - [UseSqlite](/docs/sdk-reference/configuration/use-sqlite) (`Trax.Effect.Data.Sqlite`): the SQLite provider
 - [UseInMemory](/docs/sdk-reference/configuration/use-in-memory) (`Trax.Effect.Data.InMemory`): the in-memory provider
 

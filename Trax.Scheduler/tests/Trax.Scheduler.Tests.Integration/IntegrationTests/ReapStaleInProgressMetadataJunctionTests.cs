@@ -465,6 +465,136 @@ public class ReapStaleInProgressMetadataJunctionTests : TestSetup
 
     #endregion
 
+    #region Excluded trains
+
+    // A train left out of MaxActiveJobs has no timeout, so the reaper judges it by its host: a forced roll kills the
+    // host, and a hub that starts while drained skips the startup recovery that used to fail such a run.
+    private const string ExcludedTrain = "Reap.Tests.ExcludedTrain";
+
+    [Test]
+    public async Task Run_ExcludedRunWhoseHostStoppedBeating_IsFailed()
+    {
+        var host = await Heartbeat(TimeProvider.System.GetUtcNow().UtcDateTime.AddHours(-2));
+        var run = await ExcludedRun(host, startedMinutesAgo: 120);
+
+        await RunExcluded();
+
+        var loaded = await Load(run);
+        loaded.TrainState.Should().Be(TrainState.Failed);
+        loaded.FailureException.Should().Be("HostStoppedBeating");
+    }
+
+    [Test]
+    public async Task Run_ExcludedRunWithNoHostHeartbeat_IsFailed()
+    {
+        var run = await ExcludedRun($"gone-{Guid.NewGuid():N}", startedMinutesAgo: 120);
+
+        await RunExcluded();
+
+        (await Load(run)).TrainState.Should().Be(TrainState.Failed);
+    }
+
+    [LeavesStuckRuns(
+        "Seeds a long excluded run on a live host, which the reaper must leave alone."
+    )]
+    [Test]
+    public async Task Run_LongExcludedRunOnALiveHost_IsNotReaped()
+    {
+        var host = await Heartbeat(TimeProvider.System.GetUtcNow().UtcDateTime);
+        var run = await ExcludedRun(host, startedMinutesAgo: 600);
+
+        await RunExcluded();
+
+        (await Load(run))
+            .TrainState.Should()
+            .Be(TrainState.InProgress, "its host still beats, so the run may still be working");
+    }
+
+    [LeavesStuckRuns("Seeds a recent excluded run whose host is gone, too recent for the reaper.")]
+    [Test]
+    public async Task Run_RecentExcludedRunOfAGoneHost_IsNotReapedYet()
+    {
+        var run = await ExcludedRun($"gone-{Guid.NewGuid():N}", startedMinutesAgo: 5);
+
+        await RunExcluded();
+
+        (await Load(run)).TrainState.Should().Be(TrainState.InProgress);
+    }
+
+    private async Task RunExcluded()
+    {
+        _config.NotNull().StaleInProgressTimeout = TimeSpan.FromMinutes(30);
+        _config.NotNull().ExcludedTrainTypeNames.Add(ExcludedTrain);
+        try
+        {
+            await _train.NotNull().Run(Unit.Default).ConfigureAwait(false);
+        }
+        finally
+        {
+            _config.NotNull().ExcludedTrainTypeNames.Remove(ExcludedTrain);
+        }
+    }
+
+    private async Task<string> Heartbeat(DateTime lastBeat)
+    {
+        var id = $"host-{Guid.NewGuid():N}";
+        DataContext.HostHeartbeats.Add(
+            new Trax.Effect.Models.HostHeartbeat.HostHeartbeat
+            {
+                InstanceId = id,
+                HostName = id,
+                HostEnvironment = "server",
+                TraxVersion = "test",
+                StartedAt = lastBeat,
+                LastHeartbeatAt = lastBeat,
+            }
+        );
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        DataContext.Reset();
+        return id;
+    }
+
+    private async Task<Metadata> ExcludedRun(string host, int startedMinutesAgo)
+    {
+        var metadata = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = ExcludedTrain,
+                ExternalId = Guid.NewGuid().ToString("N"),
+                Input = null,
+            },
+            TimeProvider.System
+        );
+        metadata.TrainState = TrainState.InProgress;
+        metadata.HostInstanceId = host;
+        await DataContext.Track(metadata).ConfigureAwait(false);
+        await DataContext.SaveChanges(CancellationToken.None).ConfigureAwait(false);
+        await DataContext
+            .Metadatas.Where(m => m.Id == metadata.Id)
+            .ExecuteUpdateAsync(
+                s =>
+                    s.SetProperty(
+                        m => m.StartTime,
+                        TimeProvider.System.GetUtcNow().UtcDateTime.AddMinutes(-startedMinutesAgo)
+                    ),
+                CancellationToken.None
+            )
+            .ConfigureAwait(false);
+        DataContext.Reset();
+        return metadata;
+    }
+
+    private async Task<Metadata> Load(Metadata run)
+    {
+        DataContext.Reset();
+        return await DataContext
+            .Metadatas.AsNoTracking()
+            .FirstAsync(m => m.Id == run.Id)
+            .ConfigureAwait(false);
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private async Task<Manifest> CreateManifest(int maxRetries = 3)

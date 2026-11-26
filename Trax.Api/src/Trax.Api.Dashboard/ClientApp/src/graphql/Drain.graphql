@@ -1,0 +1,22 @@
+# Whether the hosts are drained, until when and by whom, and the work a drain waits on.
+query Drain {
+  operations {
+    config {
+      drain {
+        drained
+        until
+        startedAt
+        startedBy
+        busy {
+          kind
+          id
+          name
+          state
+          since
+          host
+        }
+        busyTotal
+      }
+    }
+  }
+}

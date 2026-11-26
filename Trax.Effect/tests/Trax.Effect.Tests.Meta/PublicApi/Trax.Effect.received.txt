@@ -162,6 +162,16 @@ namespace Trax.Effect.Configuration.Deploy
         public string? GraphQL { get; set; }
         public string? Health { get; set; }
     }
+    public static class DeployExposure
+    {
+        public const string ConfigurationKey = "Trax:Deploy:Exposure";
+        public const string ProxySecretHeader = "Trax-Proxy-Secret";
+        public const string ProxySecretKey = "Trax:Deploy:ProxySecret";
+        public const string ProxySecretVariable = "Trax__Deploy__ProxySecret";
+        public const string Tailnet = "tailnet";
+        public const string TailscaleScheme = "TraxTailscale";
+        public const string Variable = "Trax__Deploy__Exposure";
+    }
     public sealed class DeployManifest
     {
         public const int CurrentVersion = 1;
@@ -183,6 +193,24 @@ namespace Trax.Effect.Configuration.Deploy
         public static string? Path { get; }
         public static bool Requested { get; }
         public static string? PathIn(System.Collections.Generic.IReadOnlyList<string> args) { }
+    }
+    public static class TraxDrain
+    {
+        public const string Argument = "--trax-drain";
+        public const string DeployActor = "deploy";
+        public const string ForceVariable = "TRAX_DRAIN_FORCE";
+        public const string HoldVariable = "TRAX_DRAIN_HOLD";
+        public const string ResumeArgument = "--trax-resume";
+        public static readonly System.TimeSpan DefaultTimeout;
+        public static readonly System.TimeSpan Margin;
+        public static readonly System.TimeSpan MaximumTimeout;
+        public static bool Requested { get; }
+        public static bool ForceRequested(string? value) { }
+        public static System.TimeSpan HoldIn(string? value) { }
+        public static System.TimeSpan ParseTimeout(string value, string paramName) { }
+        public static bool RequestedIn(System.Collections.Generic.IReadOnlyList<string> args) { }
+        public static bool ResumeRequestedIn(System.Collections.Generic.IReadOnlyList<string> args) { }
+        public static System.TimeSpan? TimeoutIn(System.Collections.Generic.IReadOnlyList<string> args) { }
     }
     public static class TraxMigrate
     {
@@ -527,6 +555,22 @@ namespace Trax.Effect.Models.DeadLetter
         public override string ToString() { }
         public static Trax.Effect.Models.DeadLetter.DeadLetter Create(Trax.Effect.Models.DeadLetter.DTOs.CreateDeadLetter createDeadLetter) { }
         public static Trax.Effect.Models.DeadLetter.DeadLetter Create(Trax.Effect.Models.DeadLetter.DTOs.CreateDeadLetter createDeadLetter, System.TimeProvider timeProvider) { }
+    }
+}
+namespace Trax.Effect.Models.Drain
+{
+    public class Drain
+    {
+        public const long SingletonId = 1;
+        public Drain() { }
+        [System.ComponentModel.DataAnnotations.Schema.Column("id")]
+        public long Id { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("started_at")]
+        public System.DateTime StartedAt { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("started_by")]
+        public string StartedBy { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("until")]
+        public System.DateTime Until { get; set; }
     }
 }
 namespace Trax.Effect.Models.EffectClaim

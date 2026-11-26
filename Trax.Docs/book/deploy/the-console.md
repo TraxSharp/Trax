@@ -25,7 +25,8 @@ which `GateOperations(roles: Roles.Staff)` refuses to anyone who is not staff, w
 page. A page load cannot carry a bearer token, so a role on the shell itself needs a scheme the
 browser sends, a cookie from OIDC sign-in. Until Shopfront has one, keep the shell anonymous and
 put `/trax/dashboard` behind something that is the gate: an internal network, a VPN, or the
-ingress's own sign-in.
+ingress's own sign-in. On a cluster, `trax deploy` can make the whole hub reachable only from your
+tailnet (19.10).
 
 ## SDK Reference
 

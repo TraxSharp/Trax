@@ -51,9 +51,6 @@ var builder = WebApplication.CreateBuilder(args);
 var connectionString =
     builder.Configuration.GetConnectionString("Shopfront")
     ?? throw new InvalidOperationException("ConnectionStrings:Shopfront is not set.");
-var rabbitMq =
-    builder.Configuration.GetConnectionString("RabbitMq")
-    ?? throw new InvalidOperationException("ConnectionStrings:RabbitMq is not set.");
 var development = builder.Environment.IsDevelopment();
 
 // The key the hub and the workers sign their events with. A process drops any event not signed
@@ -96,18 +93,25 @@ builder.Services.AddTrax(trax =>
     trax.AddEffects(effects =>
             effects
                 .UsePostgres(connectionString)
+                // A deploy's migrate step brings the shop's schema up to date too.
+                .MigrateOnDeploy<ShopfrontDbContext>()
                 // What the worker runs reaches the hub's subscriptions, and the other way round.
+                // The broker is ConnectionStrings:RabbitMq in Development; deployed, its host, user
+                // and password come apart, as RabbitMq:Host, RabbitMq:UserName and
+                // RabbitMq:Password, so no password sits inside a URI.
                 .UseBroadcaster(broadcaster =>
                     broadcaster.UseRabbitMq(
-                        rabbitMq,
+                        builder.Configuration,
                         rabbit =>
                         {
                             rabbit.SigningKey = broadcastKey;
-                            // Set by compose.yaml, whose broker is reached by name on its own
-                            // network. A broker anywhere else is reached over amqps://.
-                            rabbit.AllowInsecureTransport = builder.Configuration.GetValue(
-                                "Broadcast:AllowInsecureTransport",
-                                defaultValue: false
+                            // Set where trax deploy runs the broker beside the hub, reached by name
+                            // on the app's own network. Anything but the text true keeps plain
+                            // amqp:// refused; a broker anywhere else is reached over amqps://.
+                            rabbit.AllowInsecureTransport = string.Equals(
+                                builder.Configuration["Broadcast:AllowInsecureTransport"],
+                                "true",
+                                StringComparison.OrdinalIgnoreCase
                             );
                         }
                     )
@@ -206,8 +210,10 @@ builder
 
 var app = builder.Build();
 
-// The shop's schema is migrated before the hub serves. An export opens no database.
-if (!TraxClientExport.Requested)
+// In Development the hub migrates the shop's schema before it serves. Deployed, the deploy's
+// migrate step does it (MigrateOnDeploy), once, before any process of the new version starts.
+// An export opens no database.
+if (development && !TraxClientExport.Requested)
 {
     var scope = app.Services.CreateAsyncScope();
     await using (scope.ConfigureAwait(false))
@@ -254,20 +260,28 @@ if (development)
         .AllowAnonymous();
 }
 
-// Serves, or with --trax-export-client writes the client manifest and exits.
+// Serves; or writes the client manifest (--trax-export-client), reports what the hub needs from
+// its deployment (--trax-export-deploy), migrates (--trax-migrate), or drains and resumes the
+// hosts (--trax-drain, --trax-resume), and exits.
 await app.RunTraxAsync(args).ConfigureAwait(false);
 ```
 
 What changed:
 
-- **`MigrateAsync()`** in place of `EnsureSchemaCreatedAsync`, before the hub serves. The hub is the
-  one process that migrates the shop's schema; the workers start after it. Trax's own migrations
-  run in every process, one after another, under a lock.
-- **`UseBroadcaster(b => b.UseRabbitMq(rabbitMq))`.** Until now the hub's subscriptions heard only
-  about runs the hub executed itself. `runProgress` for a queued run, and the console's live views
-  of the worker's runs, need the worker to tell the hub, and RabbitMQ carries it. A machine's
-  changes do not need it: they travel through Postgres. A hub that cannot reach the broker still
-  starts, and tries again until it can.
+- **The shop's schema is migrated, not created.** In Development the hub calls `MigrateAsync()` in
+  place of `EnsureSchemaCreatedAsync` before it serves, as `dotnet run` and the tests start it.
+  Deployed, it does not: `MigrateOnDeploy<ShopfrontDbContext>()` names the context for the deploy's
+  migrate step, which starts the new version's image once with `--trax-migrate`, migrates Trax's
+  tables and the shop's, and exits before any process of that version starts (19.7). Trax's own
+  migrations run in that step too, and every serving process skips them.
+- **`UseBroadcaster(b => b.UseRabbitMq(builder.Configuration, ...))`.** Until now the hub's
+  subscriptions heard only about runs the hub executed itself. `runProgress` for a queued run, and
+  the console's live views of the worker's runs, need the worker to tell the hub, and RabbitMQ
+  carries it. A machine's changes do not need it: they travel through Postgres. A hub that cannot
+  reach the broker still starts, and tries again until it can. It reads the broker from
+  configuration: `ConnectionStrings:RabbitMq`, a URI, in Development, and deployed
+  `RabbitMq:Host`, `RabbitMq:UserName` and `RabbitMq:Password` apart, so a generated password with
+  a `/` or an `@` in it reaches the broker as it is, which it would not inside a URI.
 - **A signing key, `Broadcast:SigningKey`.** Every process on the exchange signs the events it
   publishes with it and drops any event not signed with it, so a process that can reach the broker
   but does not hold the key cannot put events in front of the hub's subscribers. `UseRabbitMq`
@@ -276,12 +290,20 @@ What changed:
   configured.
 - **`AllowInsecureTransport`, from configuration.** `UseRabbitMq` refuses a plain `amqp://` broker
   that is not on this machine, since its credentials and every event would cross the network in
-  cleartext. `localhost` passes. Compose sets `Broadcast:AllowInsecureTransport` for the broker on
-  its own network (19.7); a broker anywhere else is reached over `amqps://`.
+  cleartext. `localhost` passes. The deployment sets `Broadcast:AllowInsecureTransport` for the
+  broker `trax deploy` runs beside the hub on the app's own network (19.6); a broker anywhere else
+  is reached over `amqps://`. The hub reads it as the text `true` and nothing else, so a value that
+  is not a boolean keeps cleartext refused rather than stopping the hub.
 - **Two health checks.** `AddTraxSchedulerLiveness` fails when the scheduler has stopped
   dispatching, which is what a restart fixes: that is liveness. `AddTraxHealthCheck` reads the
   database and reports `Degraded` when dead letters wait for someone or runs keep failing: that is
   readiness, and what an alert watches. Both are anonymous, and say nothing a caller could use.
+- **`RunTraxAsync`** already ended the hub for `trax client`. It also answers each step of a
+  deploy: `--trax-export-deploy` reports what the hub needs from its deployment, `--trax-migrate`
+  migrates, and `--trax-drain` and `--trax-resume` hold and release every host's new work around
+  a release. Each does its step and exits without serving.
+- **The connection strings moved to `appsettings.Development.json`.** Deployed, they come from the
+  environment, and a broker URI left in `appsettings.json` would win over the broker's parts.
 
 `Shopfront.Hub/Shopfront.Hub.csproj`:
 
@@ -341,10 +363,6 @@ What changed:
 
 ```json file=Shopfront.Hub/appsettings.json
 {
-  "ConnectionStrings": {
-    "Shopfront": "Host=localhost;Database=shopfront;Username=postgres;Password=shopfront",
-    "RabbitMq": "amqp://guest:guest@localhost:5672"
-  },
   "Logging": {
     "LogLevel": {
       "Default": "Information",
@@ -363,6 +381,10 @@ What changed:
 
 ```json file=Shopfront.Hub/appsettings.Development.json
 {
+  "ConnectionStrings": {
+    "Shopfront": "Host=localhost;Database=shopfront;Username=postgres;Password=shopfront",
+    "RabbitMq": "amqp://guest:guest@localhost:5672"
+  },
   "Broadcast": {
     "SigningKey": "c2hvcGZyb250LWRldmVsb3BtZW50LWJyb2FkY2FzdC1rZXktcHJpbnRlZC1pbi10aGUtYm9vaw=="
   }

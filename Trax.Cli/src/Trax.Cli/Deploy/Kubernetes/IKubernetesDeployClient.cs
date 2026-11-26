@@ -31,11 +31,40 @@ internal interface IKubernetesDeployClient
         CancellationToken ct
     );
 
-    /// <summary>The Deployments, StatefulSets, Services, Jobs and PersistentVolumeClaims in the namespace.</summary>
+    /// <summary>The Secret's labels (never its values), or null when it does not exist.</summary>
+    Task<IReadOnlyDictionary<string, string>?> SecretLabelsAsync(
+        string ns,
+        string name,
+        CancellationToken ct
+    );
+
+    /// <summary>
+    /// The tailnet proxy secret an earlier deploy wrote (the <see cref="KubernetesTailnet.ProxySecretKey"/> of
+    /// <paramref name="name"/>), or null when there is none. The one Secret value trax reads back: one it minted
+    /// itself, so a rollback can give it back to the hub that still holds it.
+    /// </summary>
+    Task<string?> ProxySecretAsync(string ns, string name, CancellationToken ct);
+
+    /// <summary>
+    /// The Deployments, StatefulSets, Services, Jobs, ServiceAccounts, SecurityGroupPolicies, PersistentVolumeClaims,
+    /// NetworkPolicies, ConfigMaps and Ingresses in the namespace.
+    /// </summary>
     Task<IReadOnlyList<KubernetesObjectState>> ListAsync(string ns, CancellationToken ct);
 
-    /// <summary>Creates or updates a Service, Deployment or StatefulSet with server-side apply.</summary>
+    /// <summary>
+    /// A cluster-wide object trax writes for a namespace (a ValidatingAdmissionPolicy or its binding), with the app
+    /// its <c>trax/app</c> label names, or null when it does not exist.
+    /// </summary>
+    Task<KubernetesObjectState?> ClusterObjectAsync(string kind, string name, CancellationToken ct);
+
+    /// <summary>
+    /// Creates or updates a Service, Deployment, StatefulSet, ServiceAccount, SecurityGroupPolicy, NetworkPolicy,
+    /// ConfigMap, Ingress, Secret, ValidatingAdmissionPolicy or ValidatingAdmissionPolicyBinding with server-side apply.
+    /// </summary>
     Task ApplyAsync(IKubernetesObject<V1ObjectMeta> body, CancellationToken ct);
+
+    /// <summary>The Deployment as the cluster holds it, or null when it does not exist.</summary>
+    Task<V1Deployment?> ReadDeploymentAsync(string ns, string name, CancellationToken ct);
 
     Task CreateJobAsync(V1Job body, CancellationToken ct);
 
@@ -49,7 +78,8 @@ internal interface IKubernetesDeployClient
 
     /// <summary>
     /// Waits until the Deployment or StatefulSet has rolled out: its controller has seen the latest change, and every
-    /// copy is updated and ready. Throws when it has not within <paramref name="timeout"/>.
+    /// copy is updated and ready. Throws when it has not within <paramref name="timeout"/>, or as soon as a Deployment
+    /// passes its progress deadline.
     /// </summary>
     Task WaitForRolloutAsync(
         string ns,
@@ -76,5 +106,6 @@ internal interface IKubernetesDeployClient
         CancellationToken ct
     );
 
+    /// <summary>Deletes the object, or a cluster-wide one (an admission policy or binding), ignoring <paramref name="ns"/>.</summary>
     Task DeleteAsync(string ns, KubernetesObjectState target, CancellationToken ct);
 }

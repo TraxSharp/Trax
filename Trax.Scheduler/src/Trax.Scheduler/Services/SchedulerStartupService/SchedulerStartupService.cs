@@ -7,6 +7,7 @@ using Trax.Effect.Data.Services.RunOutcomes;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Enums;
 using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Services.Drain;
 using Trax.Scheduler.Services.ManifestPruning;
 using Trax.Scheduler.Services.RunOutcomes;
 using Trax.Scheduler.Services.TraxScheduler;
@@ -20,7 +21,7 @@ namespace Trax.Scheduler.Services.SchedulerStartupService;
 /// With <see cref="SchedulerConfiguration.RecoverStuckJobsOnStartup"/> on (the default) and a
 /// database provider registered, it first fails every <c>InProgress</c> run in the shared
 /// database whose <c>StartTime</c> precedes this host's start, regardless of which host or worker
-/// is running it.
+/// is running it, unless a drain is in force (Trax.Docs/adr/0065), when it fails none.
 ///
 /// <para>
 /// Registered first in DI so that .NET's sequential IHostedService startup order
@@ -47,9 +48,40 @@ internal sealed class SchedulerStartupService(
         // RecoverStuckJobs only makes sense with a real database — in-memory data is
         // lost on restart, so there are no stuck jobs to recover.
         if (configuration.RecoverStuckJobsOnStartup && configuration.HasDatabaseProvider)
-            await RecoverStuckJobs(cancellationToken).ConfigureAwait(false);
+        {
+            if (await DrainedAsync(cancellationToken).ConfigureAwait(false))
+                logger.LogInformation(
+                    "RecoverStuckJobs skipped: a drain is in force, so a host this one replaces may still be "
+                        + "finishing its runs. A run no host ends is failed by the stale-run reaper."
+                );
+            else
+                await RecoverStuckJobs(cancellationToken).ConfigureAwait(false);
+        }
 
         await SeedPendingManifests(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Whether a drain is in force (Trax.Docs/adr/0065). A deploy drains before it replaces the
+    /// hosts, and a forced one replaces them with work still running, so a host that starts while
+    /// drained may be starting beside hosts that are still finishing runs: it fails none of them.
+    /// The drain is not ended here: the deploy ends it once every service has rolled, and one a
+    /// dead deploy leaves lapses. A failure to read it is logged and counts as no drain, so the
+    /// recovery runs as it did before the drain existed.
+    /// </summary>
+    private async Task<bool> DrainedAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await SchedulerDrain
+                .IsDrainedAsync(serviceProvider, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Could not read the drain at startup; recovering as usual");
+            return false;
+        }
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;

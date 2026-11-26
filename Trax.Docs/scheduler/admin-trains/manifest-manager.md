@@ -36,6 +36,8 @@ Fails InProgress metadata that has not completed within `StaleInProgressTimeout`
 
 A run whose own timeout, resolved as `CancelTimedOutJobsJunction` resolves it, is longer gets as much longer: it is failed at the later of `StaleInProgressTimeout` and that timeout plus the same grace (`StaleInProgressTimeout - DefaultJobTimeout`, 40 minutes with the defaults). A manifest with a three hour timeout therefore has its run failed as stale at 3 h 40 min, not at 60 minutes while it is still working.
 
+The scheduler's own trains and those left out with `ExcludeFromMaxActiveJobs<T>()` have no timeout, so their runs are judged by their host instead: such a run is failed, with `FailureException` `HostStoppedBeating`, once it started more than 20 minutes ago (a deploy's default drain timeout plus its margin) and the host named by its `HostInstanceId` has written no [heartbeat](/docs/sdk-reference/configuration/host-tracking) since. A run on a host that still beats is never failed here, however long it runs. This is what fails such a run after a forced deploy killed its host, since a hub that starts while [drained](/docs/reference/drain-before-a-deploy) skips its startup recovery.
+
 Newly-failed metadata from both stale reapers is counted by `LoadManifestsJunction` in the same ManifestManager cycle, enabling dead-lettering if retries are exhausted.
 
 Failing a run, from either reaper, also releases its [subject key](/docs/mediator/queued-work#two-mutations-for-one-record), so a run still pending past `StalePendingTimeout` or still working past its stale threshold stops holding its subject.

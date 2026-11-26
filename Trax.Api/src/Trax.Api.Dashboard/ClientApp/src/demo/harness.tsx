@@ -115,17 +115,19 @@ export async function everyPage(page: HTMLElement) {
 /**
  * Reads the recorder (Trax.Samples scripts/recordings/dashboard.mjs) does not record yet. The demo
  * does not offer what needs them (lib/answerable.ts). Once the recordings hold one, it is checked like
- * every other read; drop it from here when they do. Empty: the recorder records every read a page
- * sends. The search's Lookup, which answers what a visitor types, is not recorded and needs no
- * entry here.
+ * every other read; drop it from here when they do. The search's Lookup, which answers what a
+ * visitor types, is not recorded and needs no entry here. Drain is here until the recordings are
+ * taken again from hosts that serve it.
  */
-export const NOT_RECORDED_YET: string[] = [];
+export const NOT_RECORDED_YET: string[] = ["Drain"];
 
 /** The read each write not recorded yet is offered from: no read, no write. */
 export const WRITES_OFFERED_FROM: Record<string, string> = {
   ResumeExecution: "RunGraph",
   CancelMachineInstance: "MachineInstance",
   StartBulkOperation: "BulkOperations",
+  DrainHosts: "Drain",
+  ResumeHosts: "Drain",
 };
 
 /** True when the demo does not offer `op` because its recordings do not hold it yet. */

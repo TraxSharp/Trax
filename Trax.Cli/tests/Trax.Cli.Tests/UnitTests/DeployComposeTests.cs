@@ -153,12 +153,37 @@ public partial class DeployComposeTests
             security_opt:
               - no-new-privileges:true
             userns_mode: nomap
+            read_only: true
+            tmpfs:
+              - /tmp
             pids_limit: 512
-            mem_limit: 1024m
-            memswap_limit: 1024m
             depends_on:
               database:
                 condition: service_healthy
+            restart: "no"
+
+          # Before any service is replaced: every running host stops taking new work, and this waits for what is
+          # busy. Past the timeout it ends the drain and fails, naming what is busy, and nothing is replaced;
+          # TRAX_DRAIN_FORCE=true replaces the services anyway.
+          drain:
+            image: orders-hub:${TRAX_IMAGE_TAG:-latest}
+            command: ["--trax-drain", "00:10:00"]
+            environment:
+              <<: *trax
+              TRAX_MIGRATIONS: skip
+              TRAX_DRAIN_FORCE: ${TRAX_DRAIN_FORCE:-false}
+            cap_drop:
+              - ALL
+            security_opt:
+              - no-new-privileges:true
+            userns_mode: nomap
+            read_only: true
+            tmpfs:
+              - /tmp
+            pids_limit: 512
+            depends_on:
+              migrate:
+                condition: service_completed_successfully
             restart: "no"
 
           hub:
@@ -173,11 +198,14 @@ public partial class DeployComposeTests
             security_opt:
               - no-new-privileges:true
             userns_mode: nomap
+            read_only: true
+            tmpfs:
+              - /tmp
             pids_limit: 512
-            mem_limit: 1024m
-            memswap_limit: 1024m
             depends_on:
               migrate:
+                condition: service_completed_successfully
+              drain:
                 condition: service_completed_successfully
               rabbitmq:
                 condition: service_healthy
@@ -193,17 +221,44 @@ public partial class DeployComposeTests
             security_opt:
               - no-new-privileges:true
             userns_mode: nomap
+            read_only: true
+            tmpfs:
+              - /tmp
             pids_limit: 512
-            mem_limit: 1024m
-            memswap_limit: 1024m
             deploy:
               replicas: 2
             depends_on:
               migrate:
                 condition: service_completed_successfully
+              drain:
+                condition: service_completed_successfully
               rabbitmq:
                 condition: service_healthy
             restart: unless-stopped
+
+          # Once every service has started, the drain ends and every host takes work again. A hub that starts
+          # leaves it in place; Resume in the console ends it, or it lapses on its own.
+          resume:
+            image: orders-hub:${TRAX_IMAGE_TAG:-latest}
+            command: ["--trax-resume"]
+            environment:
+              <<: *trax
+              TRAX_MIGRATIONS: skip
+            cap_drop:
+              - ALL
+            security_opt:
+              - no-new-privileges:true
+            userns_mode: nomap
+            read_only: true
+            tmpfs:
+              - /tmp
+            pids_limit: 512
+            depends_on:
+              hub:
+                condition: service_started
+              worker:
+                condition: service_started
+            restart: "no"
 
         volumes:
           database:
@@ -227,6 +282,9 @@ public partial class DeployComposeTests
                 RABBITMQ_PASSWORD=
                 Auth__Authority=
                 Stripe__ApiKey=
+                # true replaces the services even when work is still busy when the drain times out. Leave it false, and
+                # set it for one release when you mean it: TRAX_DRAIN_FORCE=true podman compose up -d migrate drain.
+                TRAX_DRAIN_FORCE=false
                 # The tag of the images to run, as trax deploy --build tagged them.
                 TRAX_IMAGE_TAG=latest
 
@@ -609,12 +667,124 @@ public partial class DeployComposeTests
     }
 
     [Test]
-    public void A_service_with_no_memory_runs_in_the_default()
+    public void A_service_with_no_memory_runs_with_no_memory_limit()
     {
         var compose = ComposeTarget.Render(File_(), Exports())[0].Content.ReplaceLineEndings("\n");
 
-        Block(compose, "hub").Should().Contain("    mem_limit: 1024m\n");
-        Block(compose, "migrate").Should().Contain("    mem_limit: 1024m\n");
+        foreach (var service in new[] { "migrate", "hub", "worker" })
+        {
+            Block(compose, service).Should().NotContain("mem_limit", service);
+            Block(compose, service).Should().NotContain("memswap_limit", service);
+            Block(compose, service).Should().NotContain("cpus:", service);
+        }
+    }
+
+    [Test]
+    public void The_backing_services_keep_their_measured_memory_when_the_environment_names_none()
+    {
+        var compose = ComposeTarget.Render(File_(), Exports())[0].Content.ReplaceLineEndings("\n");
+
+        Block(compose, "database")
+            .Should()
+            .Contain("    mem_limit: 1024m\n    memswap_limit: 1024m\n");
+        Block(compose, "rabbitmq")
+            .Should()
+            .Contain("    mem_limit: 512m\n    memswap_limit: 512m\n");
+    }
+
+    [Test]
+    public void A_service_runs_under_the_pids_and_cpus_it_names()
+    {
+        var file = File_();
+        file.Services["worker"].Pids = 2048;
+        file.Services["worker"].Cpus = 1.5m;
+
+        var compose = ComposeTarget.Render(file, Exports())[0].Content.ReplaceLineEndings("\n");
+
+        Block(compose, "worker").Should().Contain("    pids_limit: 2048\n    cpus: 1.5\n");
+        Block(compose, "hub").Should().Contain("    pids_limit: 512\n");
+        Block(compose, "hub").Should().NotContain("cpus:");
+    }
+
+    [Test]
+    public void The_cpus_a_service_names_render_the_same_in_any_culture()
+    {
+        var file = File_();
+        file.Services["worker"].Cpus = 0.25m;
+        var culture = System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo(
+                "de-DE"
+            );
+
+            var compose = ComposeTarget.Render(file, Exports())[0].Content;
+
+            compose.Should().Contain("cpus: 0.25");
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = culture;
+        }
+    }
+
+    [Test]
+    public void The_environment_sets_the_backing_services_limits()
+    {
+        var limits = new Dictionary<string, DeployLimits>(StringComparer.Ordinal)
+        {
+            ["database"] = new()
+            {
+                Memory = 4096,
+                Pids = 1024,
+                Cpus = 2,
+            },
+            ["rabbitmq"] = new() { Memory = 768 },
+        };
+
+        var compose = ComposeTarget
+            .Render(File_(), Exports(), DeployEnvironment.Podman, limits)[0]
+            .Content.ReplaceLineEndings("\n");
+
+        Block(compose, "database")
+            .Should()
+            .Contain(
+                "    pids_limit: 1024\n    cpus: 2\n    mem_limit: 4096m\n    memswap_limit: 4096m\n"
+            );
+        Block(compose, "rabbitmq")
+            .Should()
+            .Contain("    pids_limit: 512\n    mem_limit: 768m\n    memswap_limit: 768m\n");
+    }
+
+    [Test]
+    public void A_broker_limit_with_no_broker_is_refused()
+    {
+        var limits = new Dictionary<string, DeployLimits>(StringComparer.Ordinal)
+        {
+            ["rabbitmq"] = new() { Memory = 768 },
+        };
+        var exports = Exports();
+        foreach (var export in exports.Values)
+            export.Transports.Clear();
+
+        var act = () => ComposeTarget.Render(File_(), exports, DeployEnvironment.Podman, limits);
+
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*limits names rabbitmq*no host uses RabbitMQ*");
+    }
+
+    [Test]
+    public void Trax_services_get_a_read_only_root_and_the_backing_services_do_not()
+    {
+        var compose = ComposeTarget.Render(File_(), Exports())[0].Content.ReplaceLineEndings("\n");
+
+        foreach (var service in new[] { "migrate", "hub", "worker" })
+            Block(compose, service)
+                .Should()
+                .Contain("    read_only: true\n    tmpfs:\n      - /tmp\n", service);
+        foreach (var service in new[] { "database", "rabbitmq" })
+            Block(compose, service).Should().NotContain("read_only", service);
     }
 
     [Test]
@@ -669,7 +839,6 @@ public partial class DeployComposeTests
             block.Should().Contain("    cap_drop:\n      - ALL\n", service);
             block.Should().Contain("    userns_mode: nomap\n", service);
             block.Should().Contain("    pids_limit: 512\n", service);
-            block.Should().MatchRegex(@"    mem_limit: (\d+)m\n    memswap_limit: \1m\n", service);
         }
         Block(compose, "hub").Should().NotContain("cap_add");
         Block(compose, "worker").Should().NotContain("cap_add");
@@ -694,6 +863,14 @@ public partial class DeployComposeTests
         "*service 'migrate'*"
     )]
     [TestCase(
+        """{ "version": 1, "app": "orders", "services": { "drain": { "project": "Orders/Orders.csproj" } } }""",
+        "*service 'drain'*not be database, rabbitmq, migrate, drain or resume*"
+    )]
+    [TestCase(
+        """{ "version": 1, "app": "orders", "services": { "resume": { "project": "Orders/Orders.csproj" } } }""",
+        "*service 'resume'*"
+    )]
+    [TestCase(
         """{ "version": 1, "app": "orders", "services": { "hub": { "project": "Nope/Nope.csproj" } } }""",
         "*'Nope/Nope.csproj'*does not exist*"
     )]
@@ -712,6 +889,18 @@ public partial class DeployComposeTests
     [TestCase(
         """{ "version": 1, "app": "orders", "services": { "hub": { "project": "Orders/Orders.csproj", "memory": 127 } } }""",
         "*service 'hub' has memory 127*"
+    )]
+    [TestCase(
+        """{ "version": 1, "app": "orders", "services": { "hub": { "project": "Orders/Orders.csproj", "pids": 63 } } }""",
+        "*service 'hub' has pids 63;*at least 64*"
+    )]
+    [TestCase(
+        """{ "version": 1, "app": "orders", "services": { "hub": { "project": "Orders/Orders.csproj", "cpus": 0 } } }""",
+        "*service 'hub' has cpus 0;*from 0.1 to 16*"
+    )]
+    [TestCase(
+        """{ "version": 1, "app": "orders", "services": { "hub": { "project": "Orders/Orders.csproj", "cpus": 16.5 } } }""",
+        "*service 'hub' has cpus 16.5;*from 0.1 to 16*"
     )]
     [TestCase("""{ "version": 3, "app": "orders", "services": {} }""", "*version 3*")]
     public async Task A_file_that_cannot_be_deployed_is_refused_naming_the_problem(
@@ -844,6 +1033,29 @@ public partial class DeployComposeTests
             );
         psi.Environment["ASPNETCORE_ENVIRONMENT"].Should().Be("Production");
         psi.Environment["X"].Should().Be("y");
+    }
+
+    [Test]
+    public void The_export_stand_ins_pass_the_checks_a_host_makes_at_start()
+    {
+        var file = new DeployFile
+        {
+            App = "orders",
+            ConnectionStrings = new DeployConnectionStrings { RabbitMq = "Broker" },
+            Secrets = ["Broadcast__SigningKey"],
+        };
+
+        var values = DotnetHostExporter.Placeholders(file);
+
+        // UseRabbitMq refuses cleartext to a host that is not loopback unless the host allows it.
+        new Uri(values["ConnectionStrings__Broker"])
+            .Scheme.Should()
+            .Be("amqps");
+        // A signing key is decoded and refused under 32 bytes.
+        Convert
+            .FromBase64String(values["Broadcast__SigningKey"])
+            .Length.Should()
+            .BeGreaterThanOrEqualTo(32);
     }
 
     private async Task<string> WriteAsync(DeployFile file)

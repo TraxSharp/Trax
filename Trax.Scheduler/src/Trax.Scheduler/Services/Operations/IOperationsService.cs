@@ -968,4 +968,51 @@ public interface IOperationsService
         UpdateSchedulerConfigInput input,
         CancellationToken ct
     );
+
+    /// <summary>
+    /// Whether the hosts sharing the database are drained, until when and by whom, and the work a
+    /// drain waits on: runs that are Pending or InProgress (other than one whose job waits in the
+    /// queue unclaimed, and the scheduler's own trains) and state-machine instances not at rest (an
+    /// effect in flight, or a busy invoked run). The console's scheduler page and the API's
+    /// <c>operations.config.drain</c> both read it (Trax.Docs/adr/0065).
+    /// </summary>
+    /// <param name="ct">Cancellation token.</param>
+    /// <exception cref="NotSupportedException">The implementation predates this method.</exception>
+    Task<DrainStatus> GetDrainAsync(CancellationToken ct) =>
+        throw NotImplementedBy(nameof(GetDrainAsync));
+
+    /// <summary>
+    /// Drains every host sharing the database for <paramref name="duration"/>: the job dispatcher
+    /// dispatches nothing, the manifest manager queues no scheduled run, and no local worker claims
+    /// a job, until the drain lapses or <see cref="EndDrainAsync"/> ends it. Running work carries
+    /// on. A schedule due while drained is a misfire when the drain ends, and its manifest's misfire
+    /// policy decides whether it runs then. Replaces any drain in force. A scheduler host that starts
+    /// ends a drain. The console's Drain and the API's <c>operations.config.drain</c> both call it.
+    /// </summary>
+    /// <param name="duration">
+    /// How long the drain lasts, from 1 minute to 24 hours; null for 20 minutes, a deploy's default
+    /// timeout plus its margin.
+    /// </param>
+    /// <param name="startedBy">Who sets it, recorded on the drain; at most 256 characters.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>
+    /// <c>OperationResult(true, Count: 1, ...)</c> once set; <c>OperationResult(false, ...)</c> for a
+    /// duration outside the range or a blank or overlong <paramref name="startedBy"/>.
+    /// </returns>
+    /// <exception cref="NotSupportedException">The implementation predates this method.</exception>
+    Task<OperationResult> DrainAsync(TimeSpan? duration, string startedBy, CancellationToken ct) =>
+        throw NotImplementedBy(nameof(DrainAsync));
+
+    /// <summary>
+    /// Ends the drain, so every host takes work again, whoever set it. The console's Resume and the
+    /// API's <c>operations.config.resume</c> both call it.
+    /// </summary>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>
+    /// <c>OperationResult(true, Count: 1, ...)</c> when a drain was in force; <c>Count: 0</c> when
+    /// none was.
+    /// </returns>
+    /// <exception cref="NotSupportedException">The implementation predates this method.</exception>
+    Task<OperationResult> EndDrainAsync(CancellationToken ct) =>
+        throw NotImplementedBy(nameof(EndDrainAsync));
 }

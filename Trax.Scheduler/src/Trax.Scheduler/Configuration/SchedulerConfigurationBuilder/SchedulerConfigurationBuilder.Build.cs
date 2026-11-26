@@ -61,6 +61,12 @@ public partial class SchedulerConfigurationBuilder
         foreach (var name in AdminTrains.FullNames)
             _configuration.ExcludedTrainTypeNames.Add(name);
 
+        // A drain does not wait on the scheduler's own trains, which keep its bookkeeping going
+        // while drained (Trax.Docs/adr/0065).
+        _parentBuilder.ServiceCollection.AddSingleton(
+            new Trax.Effect.Data.Services.Drain.DrainIgnoredTrains(AdminTrains.FullNames)
+        );
+
         // Register the configuration. Replace, not Add: AddTraxJobRunner registers an empty one
         // for a runner-only host, and a host that called it first must still get this one.
         _parentBuilder.ServiceCollection.Replace(ServiceDescriptor.Singleton(_configuration));
