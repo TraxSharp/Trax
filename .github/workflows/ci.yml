@@ -1328,7 +1328,8 @@ jobs:
   # here is the one a release builds with. test/e2e.sh runs pods under the runner's rootless podman
   # and probes them: the allowed domain (api.github.com, allowed below) must open, and everything
   # else (other names, direct addresses, metadata, private ranges, DNS to an outside resolver) must
-  # not. Its positive controls fail the job if a probe could not have worked.
+  # not. Its positive controls fail the job if a probe could not have worked; one.one.one.one is
+  # allowed below so the outside resolver is reachable without the egress, which the e2e checks.
   egress:
     needs: changes
     if: contains(fromJSON(needs.changes.outputs.suite-names), 'egress')
@@ -1364,6 +1365,8 @@ jobs:
             esm.ubuntu.com:80
             esm.ubuntu.com:443
             packages.microsoft.com:443
+            one.one.one.one:53
+            one.one.one.one:443
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -1384,7 +1387,12 @@ jobs:
       - name: Build the image
         run: podman build --build-arg VERSION=ci -t localhost/trax-egress:ci .
       - name: Run the image in real network namespaces
-        run: test/e2e.sh localhost/trax-egress:ci api.github.com
+        # one.one.one.one (1.1.1.1) is allowed above so the e2e's outside probes can fail: the e2e first reaches it
+        # from a container with no egress, then must find it blocked from behind the egress. Resolving it here lets
+        # harden-runner learn its addresses before the containers dial them.
+        run: |
+          getent hosts one.one.one.one
+          test/e2e.sh localhost/trax-egress:ci api.github.com
       - name: Install qemu for the arm64 build
         run: |
           sudo apt-get update -q

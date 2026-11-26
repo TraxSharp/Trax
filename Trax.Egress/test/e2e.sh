@@ -10,6 +10,8 @@
 #      joining the sidecar's network and PID namespaces, and the same stop when a process of the egress uid appears.
 #
 # The app shares one PID namespace with the sidecar, as trax deploy renders it, so the sidecar sees its processes.
+# First, a control: the outside address the probes expect blocked (1.1.1.1) must answer from a container with no
+# egress, or a firewall around the run would make those probes pass by itself.
 # Each pod sits on a network of its own with a "database" (listed, must open) and an "other" service on the same
 # port (not listed, must stay blocked), so the in-cluster allowance and the LAN refusal are both exercised.
 #
@@ -83,6 +85,20 @@ check() {
     fail=1
   fi
 }
+
+say "control: the outside destinations the probes use answer without the egress"
+# The check's outside probes (DNS to 1.1.1.1, TLS to 1.1.1.1:443) and the fail-closed probe below must be blocked
+# by the egress and nothing else. Behind a firewall that already drops 1.1.1.1 (CI's harden-runner, unless the job
+# allows one.one.one.one) they would read blocked whatever the egress did, so from a container with no egress both
+# must answer first.
+# shellcheck disable=SC2086 # pod_dns is a list of options
+if podman run --rm --network "$name" $pod_dns --user "$app_uid:$app_uid" --cap-drop ALL --entrypoint sh "$image" \
+  -c 'nc -z -w 5 1.1.1.1 443 && nslookup -type=a example.com 1.1.1.1 >/dev/null'; then
+  echo "-> 1.1.1.1:443 and DNS on 1.1.1.1:53 answer without the egress"
+else
+  echo "!! 1.1.1.1 does not answer without the egress, so the probes that it is blocked would prove nothing"
+  exit 1
+fi
 
 say "kubernetes shape: rules, then serve, then the check as the app"
 # One PID namespace for the pod, as shareProcessNamespace gives it. Without --userns=nomap: rootless podman (crun
