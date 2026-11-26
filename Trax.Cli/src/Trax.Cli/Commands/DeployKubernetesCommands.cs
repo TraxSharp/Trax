@@ -213,7 +213,8 @@ internal static class DeployKubernetesCommands
                 aws.DatabaseAccess,
                 DeployEnvironmentAws.Nodes,
                 StringComparison.Ordinal
-            )
+            ),
+            "<foundation SecretsManagerEndpoint>"
         );
     }
 

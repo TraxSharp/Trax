@@ -73,7 +73,8 @@ internal sealed class EksDeployer(
             Output(outputs, "DatabaseSecretArn"),
             Output(outputs, "DatabaseClientSecurityGroup"),
             found.ClusterSecurityGroup,
-            PodSecurityGroups: !nodes
+            PodSecurityGroups: !nodes,
+            Output(outputs, AwsStack.SecretsManagerEndpointOutput)
         );
         await new KubernetesDeployer(cluster, NoImages.Instance, say)
             .DeployAsync(file, filePath, environment, exports, tag, ct, eksTarget, force)

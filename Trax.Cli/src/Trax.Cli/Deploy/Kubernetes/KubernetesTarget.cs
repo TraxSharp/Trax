@@ -1036,7 +1036,7 @@ internal static partial class KubernetesTarget
         /// <summary>
         /// What a Trax container is given on EKS: the foundation's database by address with no password, and the
         /// entries <c>AddTraxAwsSecretsAsync</c> follows to read the password and each app secret from Secrets
-        /// Manager with the pod's role. No value is in the manifest.
+        /// Manager with the pod's role, through the foundation's endpoint. No value is in the manifest.
         /// </summary>
         private List<V1EnvVar> EksEnv(EksTarget target)
         {
@@ -1050,6 +1050,12 @@ internal static partial class KubernetesTarget
                         + "GSS Encryption Mode=Disable"
                 ),
                 Value("AWS_REGION", target.Region),
+                // The foundation's endpoint, which admits only this account's principals and secrets; a held pod is
+                // allowed it and not Secrets Manager's public name.
+                Value(
+                    "AWS_ENDPOINT_URL_SECRETS_MANAGER",
+                    $"https://{target.SecretsManagerEndpoint}"
+                ),
             };
             var entries = new List<(string SecretId, string? JsonKey, string Field, string Target)>
             {

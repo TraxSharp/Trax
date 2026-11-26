@@ -71,8 +71,11 @@ public class EksDeployTests
             "arn:db",
             "sg-client",
             "sg-cluster",
-            pods
+            pods,
+            Endpoint_
         );
+
+    internal const string Endpoint_ = "vpce-0abc-xyz.secretsmanager.us-east-1.vpce.amazonaws.com";
 
     private static KubernetesManifests Render(bool pods = true) =>
         KubernetesTarget.Render(File_(), "staging", Exports(), Tag, Target(pods));
@@ -235,6 +238,129 @@ public class EksDeployTests
                     StringComparison.Ordinal
                 )
             );
+    }
+
+    [Test]
+    public void The_foundation_reaches_secrets_manager_through_an_endpoint_limited_to_this_account()
+    {
+        // The public endpoint serves every account, so a pod allowed to reach it could reach any account's secrets
+        // with credentials of its own. The endpoint's policy lets through only this account's principals, reading
+        // this account's secrets.
+        var template = AwsStack.EksFoundation(
+            File_(),
+            "staging",
+            "orders-staging",
+            nodeSecurityGroup: null
+        );
+        var resources = template["Resources"].NotNull().AsObject();
+        var endpoint = resources["SecretsManagerEndpoint"].NotNull();
+
+        Type(endpoint).Should().Be("AWS::EC2::VPCEndpoint");
+        var properties = endpoint["Properties"].NotNull();
+        properties["VpcEndpointType"].NotNull().GetValue<string>().Should().Be("Interface");
+        properties["ServiceName"]
+            .NotNull()
+            .ToJsonString()
+            .Should()
+            .Be("{\"Fn::Sub\":\"com.amazonaws.${AWS::Region}.secretsmanager\"}");
+        properties["VpcId"].NotNull().GetValue<string>().Should().Be("vpc-1");
+        properties["PrivateDnsEnabled"]
+            .NotNull()
+            .GetValue<bool>()
+            .Should()
+            .BeFalse("the VPC may hold other workloads, and another endpoint, for Secrets Manager");
+        properties["SecurityGroupIds"]
+            .NotNull()
+            .ToJsonString()
+            .Should()
+            .Be("[{\"Ref\":\"SecretsManagerEndpointSecurityGroup\"}]");
+
+        var group = resources["SecretsManagerEndpointSecurityGroup"]
+            .NotNull()["Properties"]
+            .NotNull();
+        var ingress = group["SecurityGroupIngress"].NotNull().AsArray().Single().NotNull();
+        ingress["FromPort"].NotNull().GetValue<int>().Should().Be(443);
+        ingress["CidrIp"].NotNull().GetValue<string>().Should().Be("10.0.0.0/16");
+
+        template["Outputs"]
+            .NotNull()[AwsStack.SecretsManagerEndpointOutput]
+            .NotNull()["Value"]
+            .NotNull()
+            .ToJsonString()
+            .Should()
+            .Contain("DnsEntries");
+    }
+
+    [Test]
+    public void The_endpoints_policy_admits_only_this_accounts_principals_and_secrets()
+    {
+        var properties = Resources()["SecretsManagerEndpoint"].NotNull()["Properties"].NotNull();
+
+        var statement = properties["PolicyDocument"]
+            .NotNull()["Statement"]
+            .NotNull()
+            .AsArray()
+            .Single()
+            .NotNull();
+        statement["Effect"].NotNull().GetValue<string>().Should().Be("Allow");
+        statement["Principal"].NotNull().GetValue<string>().Should().Be("*");
+        statement["Action"]
+            .NotNull()
+            .AsArray()
+            .Select(a => a.NotNull().GetValue<string>())
+            .Should()
+            .Equal("secretsmanager:GetSecretValue");
+        statement["Resource"]
+            .NotNull()
+            .ToJsonString()
+            .Should()
+            .Be(
+                "{\"Fn::Sub\":\"arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:*\"}"
+            );
+        statement["Condition"]
+            .NotNull()
+            .ToJsonString()
+            .Should()
+            .Be("{\"StringEquals\":{\"aws:PrincipalAccount\":{\"Ref\":\"AWS::AccountId\"}}}");
+    }
+
+    [Test]
+    public void Every_pod_reads_secrets_manager_through_the_foundations_endpoint()
+    {
+        var m = Render();
+
+        foreach (
+            var container in m
+                .Services.OfType<V1Deployment>()
+                .SelectMany(d => d.Spec.Template.Spec.Containers)
+                .Concat(m.Migrate.Spec.Template.Spec.Containers)
+        )
+            container
+                .Env.Single(e =>
+                    string.Equals(
+                        e.Name,
+                        "AWS_ENDPOINT_URL_SECRETS_MANAGER",
+                        StringComparison.Ordinal
+                    )
+                )
+                .Value.Should()
+                .Be($"https://{Endpoint_}", container.Name);
+    }
+
+    [Test]
+    public async Task A_deploy_reads_the_endpoint_from_the_foundation()
+    {
+        var run = Deployer(Cluster());
+
+        await Deploy(run);
+
+        run.Kube.Jobs[0]
+            .Spec.Template.Spec.Containers[0]
+            .Env.Single(e =>
+                string.Equals(e.Name, "AWS_ENDPOINT_URL_SECRETS_MANAGER", StringComparison.Ordinal)
+            )
+            .Value.Should()
+            .Be("https://vpce-0123-abcd.secretsmanager.us-west-2.vpce.amazonaws.com");
     }
 
     private static string? Type(JsonNode? resource) => resource?["Type"]?.GetValue<string>();

@@ -1302,16 +1302,21 @@ What a deploy does, in order, changing nothing until every check passes:
 4. the images are pushed to ECR;
 5. the foundation stack `<app>-<env>-base` is created or updated, with a role the pods assume through EKS Pod Identity
    (the cluster needs the Pod Identity Agent add-on), allowed to read only the database's secret and
-   `<app>-<env>/app/*`, and one Pod Identity association per service account;
+   `<app>-<env>/app/*`, one Pod Identity association per service account, and an interface VPC endpoint for
+   Secrets Manager in the service subnets. The endpoint's policy lets only this account's principals read this
+   account's secrets (`secretsmanager:GetSecretValue`), its security group admits 443 from the VPC's range, and its
+   private DNS is off, so other workloads in the VPC keep the public endpoint and a second environment in the same
+   VPC can add its own. Its subnets must be in different availability zones;
 6. the manifests are applied as on any cluster, with a ServiceAccount per service and, under `pods`, the
-   SecurityGroupPolicy. Each container is given the database's address with no password, and
+   SecurityGroupPolicy. Each container is given the database's address with no password,
    `Trax__AwsSecrets__<n>__...` entries that tell `AddTraxAwsSecretsAsync` where to read the password and each
-   secret.
+   secret, and `AWS_ENDPOINT_URL_SECRETS_MANAGER`, the endpoint's own name (it resolves to the endpoint's private
+   addresses), so the AWS SDK reads them through the endpoint.
 
 A service that names `egress` on EKS is allowed, beside its domains, the foundation's database by its address
 (`tcp:<rds address>:5432`), the EKS Pod Identity agent its role's credentials come from (`tcp:169.254.170.23:80`),
-and Secrets Manager in the region (`tcp:secretsmanager.<region>.amazonaws.com:443`, by the addresses that name
-resolves to, which is a VPC endpoint's where the VPC has one). Instance metadata (`169.254.169.254`) stays out of
+and the foundation's Secrets Manager endpoint (`tcp:<endpoint name>:443`), never Secrets Manager's public name,
+whose addresses serve every AWS account. Instance metadata (`169.254.169.254`) stays out of
 reach. Security Groups for Pods and egress work together: the group decides what the pod's address may reach in the
 VPC, the egress what the app inside it may.
 

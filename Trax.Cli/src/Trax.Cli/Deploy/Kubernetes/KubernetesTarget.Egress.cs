@@ -9,7 +9,7 @@ internal static partial class KubernetesTarget
     /// <summary>
     /// The deployment's own services a held pod still reaches, and how: in-cluster Postgres and RabbitMQ by name, an
     /// existing database by the hosts of the connection string in its Secret, and on EKS the foundation's database,
-    /// the Pod Identity agent the pod's role comes from, and Secrets Manager.
+    /// the Pod Identity agent the pod's role comes from, and the foundation's Secrets Manager endpoint.
     /// </summary>
     private sealed record EgressOwn(IReadOnlyList<string> Entries, V1EnvVar? Postgres);
 
@@ -31,7 +31,8 @@ internal static partial class KubernetesTarget
                     )
                 );
                 own.Add($"tcp:{DeployEgress.PodIdentityAgent}");
-                own.Add(DeployEgress.Own($"secretsmanager.{eks.Region}.amazonaws.com", 443));
+                // The foundation's endpoint, never the public name: its addresses serve every account.
+                own.Add(DeployEgress.Own(eks.SecretsManagerEndpoint, 443));
             }
             else if (Env.Database is { Secret: { } dbSecret, Key: { } dbKey })
                 postgres = FromSecret(DeployEgress.PostgresVariable, dbSecret, dbKey);

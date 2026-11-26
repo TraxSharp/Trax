@@ -58,7 +58,7 @@ There are three targets, and the Kubernetes one runs three ways:
 | Drain before replacing | A `drain` service | A drain pod, chained before the restart | A drain Job | As a cluster | A drain task |
 | User namespace | `userns_mode: nomap` (podman only) | `UserNS=nomap` | `hostUsers: false` | `hostUsers: false` | None that trax sets |
 | Who reaches a hub | `127.0.0.1` | `127.0.0.1`, or nothing with a tailnet | The app's own pods (NetworkPolicy) | As a cluster | The load balancer |
-| `egress` | A sidecar; one copy per held service | A sidecar | Init container, native sidecar, admission policy | As a cluster, plus RDS, Pod Identity and Secrets Manager | Refused |
+| `egress` | A sidecar; one copy per held service | A sidecar | Init container, native sidecar, admission policy | As a cluster, plus RDS, Pod Identity and the foundation's Secrets Manager endpoint | Refused |
 | `"exposure": "tailnet"` | Refused | Tailscale and the edge in a pod of their own beside the hub | The Tailscale operator's Ingress and an edge | As a cluster | Refused |
 | Postgres | In the stack | In the stack (`try`) or a Secret | A StatefulSet (`try`) or a Secret | RDS, from the foundation | RDS, from the foundation |
 | RabbitMQ | In the stack | In the stack (`try`) | A Deployment (`try`) | Refused | Refused |

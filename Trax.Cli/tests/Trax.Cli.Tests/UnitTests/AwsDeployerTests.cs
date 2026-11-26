@@ -1165,6 +1165,8 @@ public class AwsDeployerTests
                 ["DatabaseAddress"] = "db.example",
                 ["DatabasePort"] = "5432",
                 ["DatabaseSecretArn"] = "arn:db",
+                ["SecretsManagerEndpoint"] =
+                    "vpce-0123-abcd.secretsmanager.us-west-2.vpce.amazonaws.com",
                 ["SecurityGroups"] = "sg-client,sg-db",
                 ["UserPoolId"] = "us-west-2_pool1",
                 ["UserPoolClientId"] = "client1",

@@ -91,7 +91,9 @@ domains, which is what an app that calls one model API and one package feed need
   it.
 - A `tcp:` entry, and every host `TRAX_EGRESS_POSTGRES` names, is an address allowlist, the thing rejected above
   for TLS. It is meant for single-tenant or private destinations; on a shared endpoint (a managed Postgres pooler,
-  a cloud API) it reaches every tenant behind the address.
+  a cloud API) it reaches every tenant behind the address. So on EKS a held service reaches Secrets Manager through
+  an interface endpoint the foundation creates, by the endpoint's own name and with a policy that admits only the
+  account's principals and secrets, never by the public name.
 - The app must not run as uid 61000. The admission policy refuses `runAsUser: 61000` to anything but the sidecar,
   and the sidecar refuses to serve beside a process of that uid, which catches an image whose own `USER` is 61000.
   It looks once a second, so a process that switches to the uid has up to a second before the sidecar stops, and on
@@ -116,6 +118,7 @@ container adding `SYS_PTRACE`, and, in a held pod, an app container and a `kubec
 
 ## Changelog
 
+- **2026-11-25**: On EKS, Secrets Manager is allowed by the foundation's VPC endpoint, not its public name.
 - **2026-11-25**: In a held pod the admission policy refuses a container that keeps SETUID or SETGID or may gain
   privileges.
 - **2026-11-25**: The sidecar refuses to serve beside another process of the egress uid, in a shared PID namespace.

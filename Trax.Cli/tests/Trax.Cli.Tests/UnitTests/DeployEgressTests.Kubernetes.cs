@@ -172,7 +172,7 @@ public partial class DeployEgressTests
     }
 
     [Test]
-    public void Kubernetes_on_eks_allows_the_foundations_database_pod_identity_and_secrets_manager()
+    public void Kubernetes_on_eks_allows_the_foundations_database_pod_identity_and_secrets_manager_endpoint()
     {
         var file = EksDeployTests.File_();
         file.EgressImage = Image;
@@ -190,17 +190,21 @@ public partial class DeployEgressTests
             "arn:db",
             "sg-client",
             "sg-cluster",
-            PodSecurityGroups: true
+            PodSecurityGroups: true,
+            EksDeployTests.Endpoint_
         );
 
         var allow = Allow(PodOf(Cluster(file, eks: eks), "hub").InitContainers[1]);
 
+        // Secrets Manager by the foundation's endpoint, whose name resolves to its private addresses alone and whose
+        // policy admits only this account; never the public name, whose addresses serve every account.
         allow
             .Should()
             .Be(
                 "api.anthropic.com:443 tcp:169.254.170.23:80 tcp:db.abc.us-east-1.rds.amazonaws.com:5432 "
-                    + "tcp:secretsmanager.us-east-1.amazonaws.com:443"
+                    + $"tcp:{EksDeployTests.Endpoint_}:443"
             );
+        allow.Should().NotContain("tcp:secretsmanager.");
         allow.Should().NotContain("169.254.169.254", "instance metadata stays out of reach on EKS");
     }
 
