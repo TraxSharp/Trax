@@ -64,8 +64,8 @@ virtualisation, so the podman suite runs under crun and the cluster suite skips 
 
 ## Changelog
 
-- **2026-11-24**: Recorded.
-- **2026-11-24**: Podman cannot run Kata 4, so one machine with Kata is k3s with the Kubernetes
-  backend, and the podman backend says so when told to use Kata. Proved on k3s with Kata.
 - **2026-11-25**: CI runs the podman escape suite under crun, failing rather than skipping when
   its socket or image is missing.
+- **2026-11-24**: Podman cannot run Kata 4, so one machine with Kata is k3s with the Kubernetes
+  backend, and the podman backend says so when told to use Kata. Proved on k3s with Kata.
+- **2026-11-24**: Recorded.

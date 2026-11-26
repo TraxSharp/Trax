@@ -104,12 +104,12 @@ container adding `SYS_PTRACE`.
 
 ## Changelog
 
-- **2026-11-24**: Recorded.
+- **2026-11-25**: The admission policy allows the previous egress image while the services roll.
+- **2026-11-25**: The admission policy refuses the egress uid to every container but the sidecar.
+- **2026-11-25**: Said that a `tcp:` entry is an address allowlist, for single-tenant destinations only.
+- **2026-11-25**: A ClientHello carrying ECH or ESNI is refused; the outer name was not a safe thing to decide on.
+- **2026-11-25**: Built for linux/arm64 as well as linux/amd64; Trax.Cli names the digest of the index of both.
+- **2026-11-25**: The image is pushed by its own job, the only one with `packages: write`, before publish.
 - **2026-11-24**: Proved on k3s v1.36: the rules init container's NET_ADMIN and the uid match both work in a pod
   with a user namespace of its own (`hostUsers: false`).
-- **2026-11-25**: The image is pushed by its own job, the only one with `packages: write`, before publish.
-- **2026-11-25**: Built for linux/arm64 as well as linux/amd64; Trax.Cli names the digest of the index of both.
-- **2026-11-25**: A ClientHello carrying ECH or ESNI is refused; the outer name was not a safe thing to decide on.
-- **2026-11-25**: Said that a `tcp:` entry is an address allowlist, for single-tenant destinations only.
-- **2026-11-25**: The admission policy refuses the egress uid to every container but the sidecar.
-- **2026-11-25**: The admission policy allows the previous egress image while the services roll.
+- **2026-11-24**: Recorded.

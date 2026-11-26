@@ -83,7 +83,7 @@ it, and a deleted file it holds open is seen only by the shared free-space floor
 
 ## Changelog
 
-- **2026-11-24**: Recorded.
-- **2026-11-24**: Too many files is its own refusal on a cluster, not a disk overrun.
 - **2026-11-25**: The claim's size is not a ceiling on `local-path`; a free-space floor on the runs
   volume stands in until a cluster has a per-run limit.
+- **2026-11-24**: Too many files is its own refusal on a cluster, not a disk overrun.
+- **2026-11-24**: Recorded.

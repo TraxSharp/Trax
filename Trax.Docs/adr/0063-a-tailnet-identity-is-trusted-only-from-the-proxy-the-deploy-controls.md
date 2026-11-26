@@ -88,11 +88,11 @@ origin in, and `DeployTailnetTests` the canary a cluster deploy proves the edge'
 
 ## Changelog
 
-- **2026-11-24**: Recorded.
-- **2026-11-25**: Under podman, Tailscale and the edge moved out of the hub's pod into one of their own, the edge onto
-  a Unix socket: userspace tailscaled forwards a tailnet connection serve does not take to loopback.
-- **2026-11-25**: The scheme refuses a default CORS policy that lets any origin in, since the login is an ambient
-  credential.
-- **2026-11-25**: A rollback writes the replaced proxy secret back before it restores the Deployments.
 - **2026-11-25**: A tailnet deploy proves the network plugin enforces the edge's policy before it goes on; the secret
   was never a stand-in for it.
+- **2026-11-25**: A rollback writes the replaced proxy secret back before it restores the Deployments.
+- **2026-11-25**: The scheme refuses a default CORS policy that lets any origin in, since the login is an ambient
+  credential.
+- **2026-11-25**: Under podman, Tailscale and the edge moved out of the hub's pod into one of their own, the edge onto
+  a Unix socket: userspace tailscaled forwards a tailnet connection serve does not take to loopback.
+- **2026-11-24**: Recorded.
