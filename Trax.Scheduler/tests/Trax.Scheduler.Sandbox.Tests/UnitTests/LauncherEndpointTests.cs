@@ -319,4 +319,25 @@ public class LauncherEndpointTests
         slow.Response.StatusCode.Should().Be(StatusCodes.Status401Unauthorized, Adr);
         await pipe.Writer.CompleteAsync();
     }
+
+    [Test]
+    public async Task Post_EverySlowBodyDroppedAtTheWindow_LeavesTheNextRequestRead()
+    {
+        var (endpoint, time) = Endpoint();
+        var pipes = Enumerable.Range(0, endpoint.MaxPendingReads).Select(_ => new Pipe()).ToList();
+        var slow = pipes
+            .Select(p => endpoint.HandleAsync(Unauthenticated(time, p.Reader.AsStream())))
+            .ToList();
+
+        time.Advance(NonceCache.Window + TimeSpan.FromSeconds(1));
+        await Task.WhenAll(slow)
+            .WaitAsync(TimeSpan.FromSeconds(10), TimeProvider.System, CancellationToken.None);
+        var next = Unauthenticated(time, new MemoryStream("{}"u8.ToArray()));
+        await endpoint.HandleAsync(next);
+
+        next.Response.StatusCode.Should()
+            .Be(StatusCodes.Status401Unauthorized, "a dropped body gives its place back; " + Adr);
+        foreach (var pipe in pipes)
+            await pipe.Writer.CompleteAsync();
+    }
 }
