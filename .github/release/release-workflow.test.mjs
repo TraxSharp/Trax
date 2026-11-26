@@ -205,6 +205,10 @@ for a in "$@"; do case "$a" in oci-archive:*) printf archive > "\${a#oci-archive
 
     it('may reach the Ubuntu archive, for the qemu the arm64 build runs under', () => {
       assert.ok(allowedEndpoints(build).includes('azure.archive.ubuntu.com:80'));
+      // A runner on AWS reaches its region's EC2 mirror, falling back to archive.ubuntu.com.
+      for (const job of [build, yaml.load(readFileSync(join(dirname(workflowPath), 'ci.yml'), 'utf8')).jobs.egress])
+        for (const host of ['*.ec2.archive.ubuntu.com:80', 'archive.ubuntu.com:80', 'security.ubuntu.com:80'])
+          assert.ok(allowedEndpoints(job).includes(host), host);
       assert.match(step(build, 'Install qemu for the arm64 build').run, /apt-get install .*qemu-user-binfmt/);
       assert.ok(indexOf(build, 'Install qemu for the arm64 build') < indexOf(build, 'Build the egress image'));
     });
