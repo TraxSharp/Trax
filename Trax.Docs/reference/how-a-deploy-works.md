@@ -87,9 +87,10 @@ systemd. It does not run ECS, EKS or any managed cluster; see
    the app's pods must not reach a listener labelled as the edge. If it does, the deploy stops with nothing exposed.
 7. Bring up Postgres and RabbitMQ in the cluster, on the `try` profile.
 8. Run the migrate Job. If it fails, the deploy stops: no service has moved.
-9. Write a new tailnet proxy secret, when the environment is exposed on a tailnet.
-10. If a service ran before, run the drain Job. If something is still busy at the timeout, the deploy stops, nothing
+9. If a service ran before, run the drain Job. If something is still busy at the timeout, the deploy stops, nothing
     has moved, and the drain is ended. A first deploy skips this step.
+10. Write a new tailnet proxy secret, when the environment is exposed on a tailnet. It comes after the drain so a
+    refused deploy leaves the Secret holding the value the running hub and edge were started with.
 11. Apply the services and wait for each to roll out. If one does not, put every service back as it was.
 12. After a drain, run the resume Job, whether the roll succeeded or was rolled back.
 
@@ -107,8 +108,9 @@ Each step is where it is for a reason:
 - **The migration runs before any host moves**, as a Job on the new image. The version before it keeps serving while
   it runs, so a migration has to leave that version working; for the same reason a rollback does not undo it. If it
   fails, the deploy stops with the end of its log.
-- **The tailnet proxy secret is minted after the migration and before the services**, so the hub and the edge
-  restart onto the new value in the same roll. For those seconds a signed-in request is anonymous; see
+- **The tailnet proxy secret is minted after the drain and before the services**, so the hub and the edge
+  restart onto the new value in the same roll, and a deploy refused before the roll leaves the value they run with.
+  Under podman the new value is written beside the old one and moved into place by the printed restart step. For those seconds a signed-in request is anonymous; see
   [Tailnet sign-in](/docs/security/tailnet-sign-in).
 - **The drain comes after the migration and before the roll.** A hub that starts fails every run still InProgress
   from before it started, on any host, because nothing records which host owns a run. The drain makes sure there is

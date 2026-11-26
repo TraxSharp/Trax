@@ -547,22 +547,23 @@ internal static class DeployKubernetesCommands
             );
         await WritePrivateAsync(secretPath, secretYaml, ct).ConfigureAwait(false);
         await stdout.WriteLineAsync($"Wrote {secretPath} (mode 0600).").ConfigureAwait(false);
-        if (stack.ProxySecretName is not null)
+        var release = stack.ReleaseFrom(previous, secretsChanged);
+        if (RotatesProxySecret(stack, release))
         {
-            var proxySecretPath = PodmanTarget.ProxySecretPath(secretPath);
+            var next = PodmanTarget.NextProxySecretPath(secretPath);
             await WritePrivateAsync(
-                    proxySecretPath,
+                    next,
                     PodmanTarget.ProxySecretYaml(stack, MintProxySecret()),
                     ct
                 )
                 .ConfigureAwait(false);
             await stdout
-                .WriteLineAsync($"Wrote {proxySecretPath} (mode 0600), a new tailnet proxy secret.")
+                .WriteLineAsync(
+                    $"Wrote {next} (mode 0600), a new tailnet proxy secret the restart below moves into place."
+                )
                 .ConfigureAwait(false);
         }
-        await stdout
-            .WriteLineAsync(InstallHint(stack, dir, stack.ReleaseFrom(previous, secretsChanged)))
-            .ConfigureAwait(false);
+        await stdout.WriteLineAsync(InstallHint(stack, dir, release)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -593,6 +594,12 @@ internal static class DeployKubernetesCommands
         var restart =
             "systemctl --user restart "
             + string.Join(' ', release.Restart.Select(u => $"{u}.service"));
+        // The new proxy secret goes live only in the step that restarts its readers, so a drain that refuses, or a
+        // unit that restarts on its own before the install, leaves them all on the value they run with.
+        if (RotatesProxySecret(stack, release))
+            restart =
+                $"mv -f {PodmanTarget.NextProxySecretPath(stack.SecretPath)} "
+                + $"{PodmanTarget.ProxySecretPath(stack.SecretPath)} && {restart}";
         if (release.Restart.Count > 0 && release.Drain)
             lines.AddRange(DrainLines(stack, dir, restart));
         else if (release.Restart.Count > 0)
@@ -610,6 +617,23 @@ internal static class DeployKubernetesCommands
             );
         }
         return string.Join('\n', lines);
+    }
+
+    /// <summary>
+    /// Whether <paramref name="release"/> restarts a unit that plays the tailnet proxy secret, which is when a deploy
+    /// writes a new one: one the release does not restart would read it only when it next restarts on its own, apart
+    /// from its peer.
+    /// </summary>
+    internal static bool RotatesProxySecret(PodmanStack stack, PodmanStack.Release release)
+    {
+        if (stack.ProxySecretName is null)
+            return false;
+        var play = $"kube play --replace {PodmanTarget.ProxySecretPath(stack.SecretPath)}\n";
+        return stack.Files.Any(f =>
+            f.Path.EndsWith(".kube", StringComparison.Ordinal)
+            && release.Restart.Contains(f.Path[..^".kube".Length], StringComparer.Ordinal)
+            && f.Content.Contains(play, StringComparison.Ordinal)
+        );
     }
 
     /// <summary>

@@ -57,6 +57,13 @@ internal static class PodmanTarget
     public static string ProxySecretPath(string secretPath) =>
         Path.Combine(Path.GetDirectoryName(secretPath) ?? ".", "tailnet.yaml");
 
+    /// <summary>
+    /// Where a deploy writes the new proxy secret: beside <see cref="ProxySecretPath"/>, which the release's restart
+    /// step replaces with it. A unit that restarts on its own before then still plays the value its peer runs with.
+    /// </summary>
+    public static string NextProxySecretPath(string secretPath) =>
+        Path.Combine(Path.GetDirectoryName(secretPath) ?? ".", "tailnet.next.yaml");
+
     public static PodmanStack Render(
         DeployFile file,
         string environment,

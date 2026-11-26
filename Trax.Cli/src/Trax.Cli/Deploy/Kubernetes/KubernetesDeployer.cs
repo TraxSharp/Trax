@@ -75,15 +75,15 @@ internal sealed class KubernetesDeployer(
         await ApplyAndWaitAsync(manifests.NamespaceName, manifests.Backing, ct)
             .ConfigureAwait(false);
         await MigrateAsync(environment, manifests, ct).ConfigureAwait(false);
-        var proxySecretBefore = await RotateProxySecretAsync(file, manifests, ct)
-            .ConfigureAwait(false);
-
         var before = await DeploymentsBeforeAsync(manifests, ct).ConfigureAwait(false);
         // A first deploy has nothing running to drain.
         var drained = before.Values.Any(d => d is not null);
         if (drained)
             await DrainAsync(environment, env.DrainTimeoutValue(), manifests, ct)
                 .ConfigureAwait(false);
+        // After the drain: one rotated ahead of a refused drain is a value no running pod has.
+        var proxySecretBefore = await RotateProxySecretAsync(file, manifests, ct)
+            .ConfigureAwait(false);
 
         say($"Rolling the services onto {tag}...");
         try

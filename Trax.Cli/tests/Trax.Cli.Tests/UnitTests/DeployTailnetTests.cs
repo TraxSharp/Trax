@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using k8s;
 using k8s.Models;
+using Trax.Cli.Commands;
 using Trax.Cli.Deploy;
 using Trax.Cli.Deploy.Aws;
 using Trax.Cli.Deploy.Kubernetes;
@@ -709,6 +710,31 @@ public class DeployTailnetTests
             .Equal("new-secret");
     }
 
+    [Test]
+    public async Task A_refused_drain_leaves_the_proxy_secret_the_running_hub_was_started_with()
+    {
+        var cluster = RollingBackCluster();
+        cluster.FailRollout = null;
+        cluster.ProxySecrets["orders-staging-tailnet"] = "old-secret";
+        cluster.JobResults["-drain-"] = new KubernetesJobResult(
+            Succeeded: false,
+            Reason: "BackoffLimitExceeded",
+            "still busy"
+        );
+        var deployer = new KubernetesDeployer(
+            cluster,
+            new KubernetesDeployerTests.FakeImages(),
+            _ => { },
+            () => "new-secret"
+        );
+
+        var act = () => Deploy(deployer);
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        cluster.Applied.OfType<V1Secret>().Should().BeEmpty();
+        cluster.Calls.Should().NotContain("apply Deployment/hub");
+    }
+
     /// <summary>A cluster running the hub and the edge from an earlier deploy, where the new hub never rolls out.</summary>
     private static KubernetesDeployerTests.FakeCluster RollingBackCluster()
     {
@@ -1055,6 +1081,71 @@ public class DeployTailnetTests
             .Contain("Requires=orders-home-hub.service")
             .And.Contain("After=orders-home-hub.service");
         unit.Should().NotContain("PublishPort");
+    }
+
+    [Test]
+    public void Under_podman_the_new_proxy_secret_goes_live_only_once_the_drain_exits_0()
+    {
+        var before = Files(Podman());
+        var stack = PodmanTarget.Render(
+            PodmanTailnet(),
+            "home",
+            Exports(),
+            "20261125-120000-bbbbbbbbbbbb",
+            "/src/.trax/deploy/podman/orders-home",
+            SecretPath
+        );
+        var release = stack.ReleaseFrom(before, secretsChanged: false);
+
+        release.Drain.Should().BeTrue();
+        DeployKubernetesCommands.RotatesProxySecret(stack, release).Should().BeTrue();
+        var hint = DeployKubernetesCommands.InstallHint(
+            stack,
+            "/src/.trax/deploy/podman/orders-home",
+            release
+        );
+        hint.Should()
+            .Contain(
+                "test \"$(/usr/bin/podman wait orders-home-drain-pod-drain)\" = 0 && "
+                    + "mv -f /home/u/.config/trax/orders-home/tailnet.next.yaml "
+                    + "/home/u/.config/trax/orders-home/tailnet.yaml && systemctl --user restart "
+            );
+        hint.Split('\n')
+            .Where(l => l.Contains("tailnet.next.yaml", StringComparison.Ordinal))
+            .Should()
+            .ContainSingle("the move is part of the restart the drain guards and nowhere else");
+    }
+
+    [Test]
+    public void Under_podman_a_first_release_moves_the_proxy_secret_in_before_it_starts_the_units()
+    {
+        var stack = Podman();
+        var release = stack.ReleaseFrom(
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            secretsChanged: true
+        );
+
+        DeployKubernetesCommands
+            .InstallHint(stack, "/src/.trax/deploy/podman/orders-home", release)
+            .Should()
+            .Contain(
+                "  mv -f /home/u/.config/trax/orders-home/tailnet.next.yaml "
+                    + "/home/u/.config/trax/orders-home/tailnet.yaml && systemctl --user restart "
+            );
+    }
+
+    [Test]
+    public void Under_podman_a_release_that_restarts_neither_reader_writes_no_proxy_secret()
+    {
+        var stack = Podman();
+        var release = stack.ReleaseFrom(Files(stack), secretsChanged: false);
+
+        release.Restart.Should().BeEmpty();
+        DeployKubernetesCommands.RotatesProxySecret(stack, release).Should().BeFalse();
+        DeployKubernetesCommands
+            .InstallHint(stack, "/src/.trax/deploy/podman/orders-home", release)
+            .Should()
+            .NotContain("tailnet");
     }
 
     [Test]

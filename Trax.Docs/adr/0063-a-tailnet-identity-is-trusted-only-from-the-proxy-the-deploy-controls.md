@@ -66,9 +66,12 @@ it came by. Decided with the user on 2026-11-16 and 2026-11-17 (MS-21); this rec
 
 - A cluster needs the Tailscale operator in its standalone mode; its HA `ProxyGroup` labels pods differently and the
   edge's policy would admit nothing.
-- A deploy rotates the secret and restarts the hub and the edge; requests in the seconds between are anonymous. A
-  deploy that rolls back writes the replaced value back first, so the old hub and the restored edge agree; trax reads
-  that one value back from the cluster, since nothing else holds it.
+- A deploy rotates the secret once the drain has succeeded, right before the roll, and restarts the hub and the edge;
+  requests in the seconds between are anonymous. A deploy refused before the roll leaves the value the running pods
+  have. Under podman the new value is written beside the live file and the printed restart step moves it into place,
+  so a unit that restarts on its own before then still reads the old one. A deploy that rolls back writes the
+  replaced value back first, so the old hub and the restored edge agree; trax reads that one value back from the
+  cluster, since nothing else holds it.
 - A subscription socket sees the tailnet caller only when the host makes the scheme its default.
 - Every kubernetes environment now runs under default-deny ingress, exposed or not.
 - A tailnet deploy on a cluster runs a canary and a probe Job before anything else, some seconds each time, and
@@ -88,6 +91,8 @@ origin in, and `DeployTailnetTests` the canary a cluster deploy proves the edge'
 
 ## Changelog
 
+- **2026-11-25**: The proxy secret is rotated after the drain, not before it, and under podman only by the restart
+  step.
 - **2026-11-25**: A tailnet deploy proves the network plugin enforces the edge's policy before it goes on; the secret
   was never a stand-in for it.
 - **2026-11-25**: A rollback writes the replaced proxy secret back before it restores the Deployments.

@@ -1234,8 +1234,8 @@ error ends with the probe's log: the edge vouches for whoever reaches it, so a p
 would let any pod in the cluster sign in as anyone. The canary and its Service are deleted either way; the Job is
 kept a day.
 
-trax writes that Secret itself, with a new random value on every deploy (32 bytes, base64url), after the migration
-and before the services; the hub and the edge both restart onto it in the same rollout, so for those seconds a
+trax writes that Secret itself, with a new random value on every deploy (32 bytes, base64url), after the drain and
+before the services, so a deploy refused before the roll leaves the value the running pods have; the hub and the edge both restart onto it in the same rollout, so for those seconds a
 signed-in request is anonymous. A deploy that rolls back writes the value it replaced back before it restores the
 Deployments, so the old hub and the edge put back beside it hold the same one. A Secret of that name that trax did
 not write is refused. Workers and the migrate
@@ -1390,8 +1390,10 @@ network that reaches the hub directly has no proxy secret. Tailscale runs as uid
 keeps its node key on the claim `<app>-<env>-tailscale`, so a restart is the same machine. Give it an auth key in
 `.env` as `TAILSCALE_AUTH_KEY` (from the admin console's Keys page; a reusable, pre-approved key, tagged if you want
 the device owned by a tag), which goes into the Secret with the rest and is read only by Tailscale. trax never
-creates one. Each deploy also writes a new proxy secret to `~/.config/trax/<app>-<env>/tailnet.yaml`, mode 0600,
-which only the hub's unit and the tailnet unit play. The tailnet unit `Requires=` the hub's, so it restarts whenever
+creates one. Each deploy also writes a new proxy secret to `~/.config/trax/<app>-<env>/tailnet.next.yaml`, mode
+0600, and the printed restart step moves it onto `tailnet.yaml`, which only the hub's unit and the tailnet unit play.
+A drain that refuses stops the install before the move, so a unit that restarts on its own meanwhile still reads the
+secret its peer runs with. The tailnet unit `Requires=` the hub's, so it restarts whenever
 the hub does and the two always hold the same secret.
 
 What differs from a cluster, and why:
