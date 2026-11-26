@@ -17,7 +17,8 @@ trap 'rm -rf "$work"' EXIT
 
 podman run --rm --security-opt label=disable -v "$repo:/w:ro" -v "$work:/out" "$sdk" sh -c '
   cp -r /w /src && cd /src &&
-  dotnet publish Trax.Scheduler/tests/Trax.Scheduler.Sandbox.Image -c Release -o /out/app -v q -nologo'
+  dotnet restore Trax.Scheduler/tests/Trax.Scheduler.Sandbox.Image --locked-mode -v q &&
+  dotnet publish Trax.Scheduler/tests/Trax.Scheduler.Sandbox.Image -c Release -o /out/app --no-restore -v q -nologo'
 cp "$here/Containerfile" "$work/Containerfile"
 podman build -q -t localhost/trax-sandbox-escape:test "$work" >/dev/null
 
