@@ -380,6 +380,62 @@ public class KubernetesSandboxBackendTests
     }
 
     [Test]
+    public async Task RunAsync_APodThatNeverGoes_KeepsTheRunDirectory()
+    {
+        // Until the pod is gone the sandbox can still change the directory under the walk that
+        // unlocks and removes it, so the directory stays for the next start's sweep.
+        var api = new FakeKubernetes(_runs) { PodsNeverGo = true };
+        api.Output["result.json"] = "{}";
+        api.OnPodsList = deleted =>
+        {
+            if (deleted)
+                _clock.Shift += TimeSpan.FromMinutes(1);
+        };
+
+        var execution = await RunAsync(api);
+
+        execution.End.Should().Be(SandboxEnd.Failed);
+        execution.Detail.Should().Contain("still there");
+        Directory
+            .Exists(Path.Combine(_runs, RunId))
+            .Should()
+            .BeTrue("the directory is removed only once the pod is gone; " + Adr);
+    }
+
+    [Test]
+    public async Task RunAsync_ALinkToALauncherDirectory_IsNotFollowedWhenTheRunIsRemoved()
+    {
+        AsANormalUser();
+        if (OperatingSystem.IsWindows())
+            return;
+        var target = Directory.CreateTempSubdirectory("trax-sbx-launcher-").FullName;
+        try
+        {
+            ReadOnly(target);
+            var api = new FakeKubernetes(_runs);
+            api.Output["result.json"] = "{}";
+            var output = Path.Combine(_runs, RunId, "out", "files");
+            Directory.CreateDirectory(output);
+            File.CreateSymbolicLink(Path.Combine(output, "x"), target);
+
+            await RunAsync(api);
+
+            Directory.Exists(Path.Combine(_runs, RunId)).Should().BeFalse();
+            File.GetUnixFileMode(target)
+                .Should()
+                .Be(
+                    UnixFileMode.UserRead | UnixFileMode.UserExecute,
+                    "removing a run never changes what a link in it points at; " + Adr
+                );
+        }
+        finally
+        {
+            File.SetUnixFileMode(target, (UnixFileMode)0b111_000_000);
+            Directory.Delete(target, recursive: true);
+        }
+    }
+
+    [Test]
     public async Task SweepAsync_ARunDirectoryTheSandboxMadeReadOnly_IsRemovedAndTheStartGoesOn()
     {
         AsANormalUser();

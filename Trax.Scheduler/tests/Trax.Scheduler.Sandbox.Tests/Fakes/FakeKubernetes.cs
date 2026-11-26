@@ -41,6 +41,12 @@ public sealed class FakeKubernetes(string runsPath) : DelegatingHandler
     /// <summary>The Job's condition: Complete, or Failed with a reason such as DeadlineExceeded.</summary>
     public (string Type, string? Reason) Condition { get; set; } = ("Complete", null);
 
+    /// <summary>When set, a deleted Job's pod is still listed forever, as a node that never tears it down.</summary>
+    public bool PodsNeverGo { get; set; }
+
+    /// <summary>Called on each list of pods, before the answer, with whether the Job was deleted yet.</summary>
+    public Action<bool>? OnPodsList { get; set; }
+
     protected override async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request,
         CancellationToken cancellationToken
@@ -90,7 +96,13 @@ public sealed class FakeKubernetes(string runsPath) : DelegatingHandler
         }
 
         if (request.Method == HttpMethod.Get && path.EndsWith("/pods", StringComparison.Ordinal))
-            return Json(HttpStatusCode.OK, _deleted ? "{\"items\":[]}" : PodsJson());
+        {
+            OnPodsList?.Invoke(_deleted);
+            return Json(
+                HttpStatusCode.OK,
+                _deleted && !PodsNeverGo ? "{\"items\":[]}" : PodsJson()
+            );
+        }
 
         if (request.Method == HttpMethod.Get && path.EndsWith("/jobs", StringComparison.Ordinal))
             return Json(HttpStatusCode.OK, "{\"items\":[]}");
