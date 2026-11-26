@@ -10,13 +10,15 @@ namespace Trax.Effect.Configuration.Deploy;
 /// </summary>
 /// <remarks>
 /// <para>
-/// A drain sets the <c>trax.drain</c> row to lapse after the timeout plus <see cref="Margin"/>, so every host stops
+/// A drain sets the <c>trax.drain</c> row to lapse after the timeout plus the hold (<see cref="HoldVariable"/>, or
+/// <see cref="Margin"/>), so every host stops
 /// starting new work: the job dispatcher dispatches nothing, the manifest manager queues no scheduled run, and no
 /// local worker claims a job. It then waits for what is busy to finish: runs that are Pending or InProgress (except a
 /// Pending run whose job is still in the queue, unclaimed) and machine instances not at rest (one with an effect in
 /// flight, or waiting on a run that is busy). When nothing is, the process exits and leaves the drain in place for
-/// the deploy to roll the hosts. Past the timeout it ends the drain and refuses, naming what is still busy, unless
-/// <see cref="ForceVariable"/> is <see langword="true"/>: then it logs the list and exits as though drained.
+/// the deploy to roll the hosts, set to lapse the hold from then. Past the timeout it ends the drain and refuses, naming
+/// what is still busy, unless <see cref="ForceVariable"/> is <see langword="true"/>: then it logs the list and exits as
+/// though drained, the drain held the same way.
 /// </para>
 /// <para>
 /// The process does not migrate the database, whatever <c>TRAX_MIGRATIONS</c> says, and refuses to serve: a host
@@ -40,6 +42,15 @@ public static class TraxDrain
     /// </summary>
     public const string ForceVariable = "TRAX_DRAIN_FORCE";
 
+    /// <summary>
+    /// The environment variable that says how long a deploy's drain holds once it has finished waiting: time for the
+    /// deploy to roll the hosts, and to roll them back where the deploy drives the rollback. A .NET time span from one
+    /// second to <see cref="MaximumTimeout"/>; empty or unset means <see cref="Margin"/>, and any other value refuses
+    /// to start. <c>trax deploy</c> sets it from the roll's own timeouts. The deploy ends the drain once it has rolled;
+    /// the hold is when a drain a deploy that died left behind lapses.
+    /// </summary>
+    public const string HoldVariable = "TRAX_DRAIN_HOLD";
+
     /// <summary>What a drain is recorded as started by when a deploy's process sets it.</summary>
     public const string DeployActor = "deploy";
 
@@ -47,9 +58,8 @@ public static class TraxDrain
     public static readonly TimeSpan DefaultTimeout = TimeSpan.FromMinutes(10);
 
     /// <summary>
-    /// How long a drain set by a deploy outlives its timeout: 10 minutes, time for the deploy to roll the hosts. The
-    /// deploy ends it once every service has rolled; a deploy that dies leaves one that lapses at the timeout plus
-    /// this.
+    /// How long a drain set by a deploy holds once it has finished waiting when <see cref="HoldVariable"/> names
+    /// nothing: 10 minutes, time for the deploy to roll the hosts.
     /// </summary>
     public static readonly TimeSpan Margin = TimeSpan.FromMinutes(10);
 
@@ -127,6 +137,27 @@ public static class TraxDrain
         throw new InvalidOperationException(
             $"{ForceVariable} is '{value}'. It takes true, which rolls the deploy even when work is still busy at "
                 + "the drain's timeout, or false."
+        );
+    }
+
+    /// <summary>
+    /// Reads <see cref="HoldVariable"/>'s value: <see cref="Margin"/> for none or an empty value, else a .NET time span
+    /// from one second to <see cref="MaximumTimeout"/>. Throws <see cref="InvalidOperationException"/> for anything
+    /// else.
+    /// </summary>
+    public static TimeSpan HoldIn(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return Margin;
+        if (
+            TimeSpan.TryParse(value.Trim(), CultureInfo.InvariantCulture, out var hold)
+            && hold >= TimeSpan.FromSeconds(1)
+            && hold <= MaximumTimeout
+        )
+            return hold;
+        throw new InvalidOperationException(
+            $"{HoldVariable} is '{value}'. It takes how long the drain holds for the roll once it has finished "
+                + $"waiting, as a time span from 00:00:01 to {MaximumTimeout:c}, such as '00:30:00'."
         );
     }
 

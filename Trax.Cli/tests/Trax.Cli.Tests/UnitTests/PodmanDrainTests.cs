@@ -49,6 +49,12 @@ public class PodmanDrainTests
     }
 
     [Test]
+    public void A_podman_drain_keeps_the_default_hold() =>
+        Files(Render())["orders-home-drain.yaml"]
+            .Should()
+            .NotContain(TraxDrain.HoldVariable, "a release restarts units, it does not roll them");
+
+    [Test]
     public void Force_is_written_into_the_drain_pod()
     {
         Files(Render(force: true))["orders-home-drain.yaml"]

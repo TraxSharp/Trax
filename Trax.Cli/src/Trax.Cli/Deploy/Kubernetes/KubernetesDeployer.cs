@@ -34,6 +34,17 @@ internal sealed class KubernetesDeployer(
     /// <summary>How long the deploy waits for the resume Job.</summary>
     public static readonly TimeSpan ResumeTimeout = TimeSpan.FromMinutes(5);
 
+    /// <summary>
+    /// How long the drain holds once it has finished waiting, for <paramref name="deployments"/> Deployments: each
+    /// one's rollout, each one's again in a rollback, the resume Job and <see cref="DrainJobSlack"/>, at most a day.
+    /// The deploy ends the drain as soon as it has rolled; this is when a drain a deploy that died left behind lapses.
+    /// </summary>
+    public static TimeSpan DrainHold(int deployments)
+    {
+        var hold = RolloutTimeout * (2 * deployments) + ResumeTimeout + DrainJobSlack;
+        return hold < TraxDrain.MaximumTimeout ? hold : TraxDrain.MaximumTimeout;
+    }
+
     public async Task DeployAsync(
         DeployFile file,
         string filePath,
@@ -225,8 +236,9 @@ internal sealed class KubernetesDeployer(
                     + $"the new version. The end of its log, which names any work still busy:\n{drain.LogTail}\n"
                     + "Work still busy at the timeout ends the drain, so the hosts take work again. Let it finish or "
                     + $"cancel it, raise drainTimeout, or run 'trax deploy --env {environment} --force' to roll "
-                    + "anyway. A drain that failed some other way lapses on its own after the timeout and 10 "
-                    + $"minutes. All of its log: 'kubectl logs -n {ns} job/{job}'."
+                    + "anyway. A drain that failed some other way lapses on its own after the timeout and "
+                    + $"{DrainHold(manifests.Services.OfType<V1Deployment>().Count()):c}, or Resume on the "
+                    + $"console's scheduler page ends it. All of its log: 'kubectl logs -n {ns} job/{job}'."
             );
     }
 

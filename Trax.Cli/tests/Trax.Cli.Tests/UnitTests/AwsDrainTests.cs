@@ -67,6 +67,13 @@ public class AwsDrainTests
         drain.Command.Should().Equal(TraxDrain.Argument, "00:10:00");
         drain.Environment.NotNull()[TraxMigrate.Variable].Should().Be(TraxMigrate.SkipValue);
         drain.Environment.Should().NotContainKey(TraxDrain.ForceVariable);
+        drain
+            .Environment.NotNull()[TraxDrain.HoldVariable]
+            .Should()
+            .Be(
+                "01:00:00",
+                "the roll and the circuit breaker's rollback run inside one stack update"
+            );
         aws.Tasks[2].Command.Should().Equal(TraxDrain.ResumeArgument);
         aws.Tasks[0]
             .Command.Should()

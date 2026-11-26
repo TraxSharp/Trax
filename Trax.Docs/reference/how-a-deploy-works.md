@@ -125,7 +125,8 @@ Each step is where it is for a reason:
   holds it and the edge put back beside it reads the Secret as it starts.
 - **The resume Job** ends the drain, after a rollback too. A hub that starts leaves it in place, so only the resume,
   Resume on the console's scheduler page or the lapse ends it. A resume that fails does not undo the deploy, and a
-  drain a deploy left behind (Ctrl-C, a crash) lapses on its own after its timeout plus ten minutes.
+  drain a deploy left behind (Ctrl-C, a crash) lapses on its own. The drain sets it to lapse, once it has finished
+  waiting, after the time the roll and a rollback can take: ten minutes per Deployment for each, plus ten.
 
 The drain, the migration and the resume reach the database from inside the cluster, through the app's own image.
 Nothing outside the cluster has to reach the app to deploy it.

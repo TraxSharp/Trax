@@ -22,6 +22,13 @@ internal sealed class AwsDeployer(
 {
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
 
+    /// <summary>
+    /// How long the drain holds once it has finished waiting: an hour, for the roll and, should it fail, the circuit
+    /// breaker's rollback, which ECS runs inside the stack update and the deploy cannot time. The deploy ends the
+    /// drain once the update settles; this is when a drain a deploy that died left behind lapses.
+    /// </summary>
+    public static readonly TimeSpan DrainHold = TimeSpan.FromHours(1);
+
     /// <summary>How many of the drain log's last lines a refusal shows.</summary>
     public const int DrainLogTail = 40;
 
@@ -390,6 +397,7 @@ internal sealed class AwsDeployer(
         };
         if (force)
             env[TraxDrain.ForceVariable] = "true";
+        env[TraxDrain.HoldVariable] = DrainHold.ToString("c", CultureInfo.InvariantCulture);
         var drain = await RunAsync(
                 stack,
                 [TraxDrain.Argument, timeout.ToString("c", CultureInfo.InvariantCulture)],
@@ -417,7 +425,8 @@ internal sealed class AwsDeployer(
                 + $"busy:\n{string.Join('\n', tail)}\nWork still busy at the timeout ends the drain, so the hosts "
                 + "take work again. Let it finish or cancel it, raise drainTimeout, or run "
                 + $"'trax deploy --env {environment} --force' to roll anyway. A drain that failed some other way "
-                + $"lapses on its own after the timeout and 10 minutes. Its log is {group} {drain.LogStream}."
+                + $"lapses on its own after the timeout and {DrainHold:c}, or Resume on the console's scheduler page "
+                + $"ends it. Its log is {group} {drain.LogStream}."
         );
     }
 

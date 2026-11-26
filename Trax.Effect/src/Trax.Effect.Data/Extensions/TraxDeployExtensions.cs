@@ -68,7 +68,8 @@ public static class TraxDeployExtensions
                 TraxMigrate.Requested,
                 cancellationToken,
                 Environment.GetCommandLineArgs(),
-                Environment.GetEnvironmentVariable(TraxDrain.ForceVariable)
+                Environment.GetEnvironmentVariable(TraxDrain.ForceVariable),
+                Environment.GetEnvironmentVariable(TraxDrain.HoldVariable)
             )
             .ConfigureAwait(false);
     }
@@ -80,6 +81,7 @@ public static class TraxDeployExtensions
     /// <param name="cancellationToken">Stops the host, or the migration.</param>
     /// <param name="processArgs">The process's own command line, read for <c>--trax-drain</c> and <c>--trax-resume</c>.</param>
     /// <param name="forceVariable">The value of <c>TRAX_DRAIN_FORCE</c>.</param>
+    /// <param name="holdVariable">The value of <c>TRAX_DRAIN_HOLD</c>.</param>
     internal static async Task RunTraxAsync(
         this IHost host,
         string[]? args,
@@ -87,7 +89,8 @@ public static class TraxDeployExtensions
         bool processMigrates,
         CancellationToken cancellationToken,
         IReadOnlyList<string>? processArgs = null,
-        string? forceVariable = null
+        string? forceVariable = null,
+        string? holdVariable = null
     )
     {
         var exportPath = (args is null ? null : TraxDeployExport.PathIn(args)) ?? processExportPath;
@@ -116,6 +119,7 @@ public static class TraxDeployExtensions
                     .DrainAsync(
                         host.Services,
                         timeout,
+                        TraxDrain.HoldIn(holdVariable),
                         TraxDrain.ForceRequested(forceVariable),
                         DrainCommand.Settle,
                         DrainCommand.Poll,

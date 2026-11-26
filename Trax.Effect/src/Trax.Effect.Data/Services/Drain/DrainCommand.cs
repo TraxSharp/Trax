@@ -24,15 +24,30 @@ internal static class DrainCommand
     public static readonly TimeSpan Poll = TimeSpan.FromSeconds(2);
 
     /// <summary>
-    /// Sets the drain to lapse after <paramref name="timeout"/> plus <see cref="TraxDrain.Margin"/>, then waits for
-    /// nothing to be busy. Returns once nothing is, leaving the drain in place. Past the timeout it ends the drain and
-    /// throws, naming what is busy, or with <paramref name="force"/> logs the list and returns with the drain kept.
-    /// Throws when its drain is ended or replaced while it waits, since the hosts may be taking work again.
-    /// Cancelled, it leaves the drain to lapse.
+    /// <see cref="DrainAsync(IServiceProvider, TimeSpan, TimeSpan, bool, TimeSpan, TimeSpan, CancellationToken)"/>,
+    /// holding the drain for <see cref="TraxDrain.Margin"/> once it has finished waiting.
+    /// </summary>
+    public static Task DrainAsync(
+        IServiceProvider services,
+        TimeSpan timeout,
+        bool force,
+        TimeSpan settle,
+        TimeSpan poll,
+        CancellationToken ct
+    ) => DrainAsync(services, timeout, TraxDrain.Margin, force, settle, poll, ct);
+
+    /// <summary>
+    /// Sets the drain to lapse after <paramref name="timeout"/> plus <paramref name="hold"/>, then waits for nothing to
+    /// be busy. Once nothing is, or with <paramref name="force"/> once the timeout has passed (logging the list), it
+    /// sets its drain to lapse <paramref name="hold"/> from then, keeping when and by whom it was started, and returns:
+    /// the roll starts now, and the hold is how long the deploy may take over it. Past the timeout without
+    /// <paramref name="force"/> it ends the drain and throws, naming what is busy. Throws when its drain is ended or
+    /// replaced while it waits, since the hosts may be taking work again. Cancelled, it leaves the drain to lapse.
     /// </summary>
     public static async Task DrainAsync(
         IServiceProvider services,
         TimeSpan timeout,
+        TimeSpan hold,
         bool force,
         TimeSpan settle,
         TimeSpan poll,
@@ -46,7 +61,7 @@ internal static class DrainCommand
 
         var started = clock.GetUtcNow();
         var deadline = started + timeout;
-        var until = deadline + TraxDrain.Margin;
+        var until = deadline + hold;
         var mine = await SetAsync(factory, clock, until, started, ct).ConfigureAwait(false);
         logger?.LogInformation(
             "Drained: no host starts new work until {Until:u}. Waiting up to {Timeout} for what is busy.",
@@ -70,21 +85,13 @@ internal static class DrainCommand
                 // A resume or another drain that landed between the look above and the busy read went unseen, and
                 // both answers act on the drain, so look again before either.
                 await StillMineAsync(factory, clock, mine, ct).ConfigureAwait(false);
-                if (total == 0)
-                {
-                    logger?.LogInformation("Nothing is busy; the hosts can be replaced.");
-                    return;
-                }
-                await PastTimeoutAsync(
-                        factory,
-                        logger,
-                        timeout,
-                        until,
-                        force,
-                        mine.NotNull(),
-                        BusyList(items, total)
-                    )
+                var list = total == 0 ? null : BusyList(items, total);
+                if (list is not null && !force)
+                    throw await RefusedAsync(factory, timeout, mine.NotNull(), list)
+                        .ConfigureAwait(false);
+                var held = await HoldAsync(factory, clock, mine.NotNull(), hold, ct)
                     .ConfigureAwait(false);
+                Returned(logger, timeout, held, list);
                 return;
             }
 
@@ -95,6 +102,53 @@ internal static class DrainCommand
             );
             await Task.Delay(Min(poll, deadline - now), clock, ct).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// Sets the drain, still <paramref name="mine"/>, to lapse <paramref name="hold"/> from now, and returns when that
+    /// is. Throws as <see cref="StillMineAsync"/> does when it is no longer its own.
+    /// </summary>
+    private static async Task<DateTimeOffset> HoldAsync(
+        IDataContextProviderFactory factory,
+        TimeProvider clock,
+        DrainRow mine,
+        TimeSpan hold,
+        CancellationToken ct
+    )
+    {
+        var until = clock.GetUtcNow() + hold;
+        var kept = await WithContextAsync(
+                factory,
+                c => DrainStore.HoldOwnedAsync(c, mine, until, ct),
+                ct
+            )
+            .ConfigureAwait(false);
+        return kept ? until : throw Replaced();
+    }
+
+    /// <summary>What a drain logs as it returns: drained, or forced past its timeout with <paramref name="list"/> busy.</summary>
+    private static void Returned(
+        ILogger? logger,
+        TimeSpan timeout,
+        DateTimeOffset held,
+        string? list
+    )
+    {
+        if (list is null)
+            logger?.LogInformation(
+                "Nothing is busy; the hosts can be replaced. The drain holds until {Until:u} or the deploy ends it "
+                    + "after the roll.",
+                held
+            );
+        else
+            logger?.LogWarning(
+                "Still busy after {Timeout}, rolling anyway ({Variable}=true); the drain holds until {Until:u} or "
+                    + "the deploy ends it after the roll:\n{Busy}",
+                timeout,
+                TraxDrain.ForceVariable,
+                held,
+                list
+            );
     }
 
     /// <summary>
@@ -143,40 +197,26 @@ internal static class DrainCommand
             .ConfigureAwait(false);
         if (mine is not null && now is not null && DrainStore.SameDrain(now, mine))
             return;
-        throw new InvalidOperationException(
+        throw Replaced();
+    }
+
+    private static InvalidOperationException Replaced() =>
+        new(
             "The drain was ended or replaced while it waited, so the hosts may be taking work again and nothing "
                 + "should be replaced. Deploy again to drain afresh."
         );
-    }
 
     /// <summary>
-    /// What a drain does once its timeout passes with work still busy: with <paramref name="force"/>, logs the list and
-    /// returns with the drain kept; otherwise ends the drain, if it is still <paramref name="mine"/>, and throws, naming
-    /// the list.
+    /// Ends the drain, if it is still <paramref name="mine"/>, once its timeout passed with <paramref name="list"/>
+    /// busy, and returns the refusal naming the list.
     /// </summary>
-    private static async Task PastTimeoutAsync(
+    private static async Task<InvalidOperationException> RefusedAsync(
         IDataContextProviderFactory factory,
-        ILogger? logger,
         TimeSpan timeout,
-        DateTimeOffset until,
-        bool force,
         DrainRow mine,
         string list
     )
     {
-        if (force)
-        {
-            logger?.LogWarning(
-                "Still busy after {Timeout}, rolling anyway ({Variable}=true); the drain stays until "
-                    + "{Until:u} or the deploy ends it after the roll:\n{Busy}",
-                timeout,
-                TraxDrain.ForceVariable,
-                until,
-                list
-            );
-            return;
-        }
-
         // Ended whatever cancelled the wait, so a refused deploy leaves the hosts taking work. A drain someone else set
         // since is theirs to end.
         await WithContextAsync(
@@ -185,7 +225,7 @@ internal static class DrainCommand
                 CancellationToken.None
             )
             .ConfigureAwait(false);
-        throw new InvalidOperationException(
+        return new InvalidOperationException(
             $"Still busy after the drain's timeout of {timeout:c}, so the drain was ended and nothing should be "
                 + $"replaced. Let it finish, cancel it, or set {TraxDrain.ForceVariable}=true (trax deploy --force) "
                 + $"to replace the hosts anyway:\n{list}"

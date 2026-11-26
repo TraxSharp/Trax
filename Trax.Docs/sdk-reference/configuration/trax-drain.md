@@ -1,6 +1,6 @@
 ---
 title: TraxDrain
-description: Reference for --trax-drain, --trax-resume and TRAX_DRAIN_FORCE, which stop every host from starting new work before a deploy replaces them.
+description: Reference for --trax-drain, --trax-resume, TRAX_DRAIN_FORCE and TRAX_DRAIN_HOLD, which stop every host from starting new work before a deploy replaces them.
 type: reference
 area: data
 parent: Configuration
@@ -33,14 +33,16 @@ network and needs no endpoint into the app. An operator can drain and resume fro
 | `Argument` | `--trax-drain`, optionally followed by a timeout (`--trax-drain 00:10:00` or `--trax-drain=00:10:00`). The process sets the drain, waits for busy work, and exits through `RunTraxAsync`. |
 | `ResumeArgument` | `--trax-resume`. The process ends the drain and exits. |
 | `ForceVariable` | `TRAX_DRAIN_FORCE`. `true` makes a drain past its timeout exit as though drained, so the deploy rolls anyway. Empty or `false` does not; any other value refuses to start. |
+| `HoldVariable` | `TRAX_DRAIN_HOLD`. How long the drain holds once the process has finished waiting, for the roll: a time span from one second to a day. Empty or unset means `Margin`; any other value refuses to start. `trax deploy` sets it from the roll's own timeouts. |
 | `DeployActor` | `deploy`, what a drain a deploy set records as `StartedBy`. |
 | `DefaultTimeout` | 10 minutes, the wait when `--trax-drain` names none. |
-| `Margin` | 10 minutes. A deploy's drain lapses at its timeout plus this, time for the roll. |
+| `Margin` | 10 minutes, the hold when `TRAX_DRAIN_HOLD` names none. |
 | `MaximumTimeout` | 24 hours. |
 | `Requested` | Whether this process's command line contains `--trax-drain` or `--trax-resume`. |
 | `RequestedIn(args)`, `ResumeRequestedIn(args)` | The same for `args`, and for `--trax-resume` alone. |
 | `TimeoutIn(args)` | The timeout `args` ask for: the value after `--trax-drain`, `DefaultTimeout` without one, null without the argument. A value that is not a time span from one second to a day, or both arguments at once, throws `ArgumentException`. |
 | `ForceRequested(value)` | Reads `TRAX_DRAIN_FORCE`'s value. |
+| `HoldIn(value)` | Reads `TRAX_DRAIN_HOLD`'s value. |
 | `ParseTimeout(value, paramName)` | Reads a timeout written as a .NET time span. |
 
 The row is `Drain`, in `Trax.Effect.Models.Drain`, on `IDataContext.Drains`: `Id` (always `SingletonId`, 1), `Until`,
@@ -67,16 +69,17 @@ What a drain waits on, its busy list, is:
 
 A process started with `--trax-drain`:
 
-1. sets the drain to lapse at now plus the timeout plus `Margin`, replacing any drain in force;
+1. sets the drain to lapse at now plus the timeout plus the hold (`TRAX_DRAIN_HOLD`, or `Margin`), replacing any
+   drain in force;
 2. waits 5 seconds, so a host that read the row just before it was set finishes its cycle and its work shows;
-3. reads the busy list every 2 seconds. When it is empty, the process exits and leaves the drain in place for the
-   roll. Before each read, and again once a read comes back empty or past the timeout, it checks the drain in force
+3. reads the busy list every 2 seconds. When it is empty, the process sets the drain to lapse the hold from then,
+   keeping when and by whom it was started, and exits, leaving the drain in place for the roll. Before each read, and again once a read comes back empty or past the timeout, it checks the drain in force
    is still its own; ended (Resume in the console, another deploy's `--trax-resume`) or replaced by another drain,
    it throws without touching the row, so the deploy refuses rather than roll over work the hosts may have started
    meanwhile.
 4. Past the timeout, it ends its own drain and throws, naming what is busy (the first 50, and how many more), so the
    process exits non-zero and the deploy refuses. With `TRAX_DRAIN_FORCE=true` it logs the list instead and exits as
-   though drained, with the drain kept.
+   though drained, with the drain held the same way.
 
 Cancelled or killed, it leaves the drain to lapse at its time. A process started with `--trax-resume` deletes the row.
 A scheduler host (one that calls `AddScheduler`) that starts while a drain is in force skips its stuck-run recovery,

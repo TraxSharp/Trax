@@ -292,6 +292,7 @@ internal static partial class KubernetesTarget
             services.AddRange(
                 r.TailnetEdge(KubernetesTailnet.Hostname(file, environment, env), hub.NotNull())
             );
+        HoldDrainForTheRoll(drain, services, onPodman);
         return new KubernetesManifests(
             NamespaceObject(file, ns),
             egressImage is null || onPodman ? [] : EgressAdmission(file, ns, egressImage),
@@ -309,6 +310,27 @@ internal static partial class KubernetesTarget
             r.ProxySecret,
             canary
         );
+    }
+
+    /// <summary>
+    /// Tells the drain Job how long to hold the drain once it has finished waiting: the roll of every Deployment in
+    /// <paramref name="services"/> and its rollback (<see cref="KubernetesDeployer.DrainHold"/>). Under podman a release
+    /// restarts systemd units, and the drain keeps its default hold.
+    /// </summary>
+    private static void HoldDrainForTheRoll(
+        V1Job drain,
+        List<IKubernetesObject<V1ObjectMeta>> services,
+        bool onPodman
+    )
+    {
+        if (onPodman)
+            return;
+        var hold = KubernetesDeployer.DrainHold(services.OfType<V1Deployment>().Count());
+        foreach (var container in drain.Spec.Template.Spec.Containers)
+            if (string.Equals(container.Name, DrainName, StringComparison.Ordinal))
+                container.Env.Add(
+                    Value(TraxDrain.HoldVariable, hold.ToString("c", CultureInfo.InvariantCulture))
+                );
     }
 
     /// <summary>The environment, refused when its target is not kubernetes.</summary>

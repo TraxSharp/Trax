@@ -31,7 +31,10 @@ idle for good.
   scheduled or dependent run (its reapers still run), and a local worker checks inside its claim's transaction. Work a
   caller queues is still written to the queue and waits. Postgres, SQLite and InMemory all keep the row.
 - **The row expires.** It holds while its `until` is ahead of the reading host's clock. A deploy sets it to its
-  timeout plus a 10 minute margin for the roll; the console and the API set a duration, 20 minutes by default and at
+  timeout plus a hold for the roll, and once the drain has finished waiting sets it again to lapse the hold from then,
+  keeping its start. The deploy sizes the hold from the roll's own timeouts (`TRAX_DRAIN_HOLD`): on Kubernetes every
+  Deployment's rollout and its rollback, on ECS an hour for the update and the circuit breaker's rollback, on compose
+  and podman 10 minutes. The console and the API set a duration, 20 minutes by default and at
   most a day. A deploy ends it once every service has rolled and when it refuses, and a crashed or interrupted deploy's row
   lapses. A scheduler host that starts while it holds leaves it in place and skips its stuck-run recovery.
 - **A schedule due while drained is a misfire.** Nothing is queued; when the drain ends, the manifest's misfire policy
@@ -81,6 +84,9 @@ manifest manager, a worker, a lapsed row, misfire after the drain, the starting 
 
 ## Changelog
 
+- **2026-11-25**: A deploy's drain holds for a time sized from the roll's own timeouts, from when it finished waiting,
+  rather than a fixed 10 minutes past its timeout. A forced roll whose new hub never got ready waited out its rollout
+  and a rollback with the drain already lapsed, so the pods put back started undrained and recovered runs still going.
 - **2026-11-25**: A starting scheduler host no longer ends the drain, and skips its stuck-run recovery while one
   holds. Ending it at the first new hub let workers not yet rolled claim work they were then cut off in, and a forced
   roll's new hub failed the runs the old one was still finishing.

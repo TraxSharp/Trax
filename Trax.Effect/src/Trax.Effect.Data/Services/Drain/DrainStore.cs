@@ -128,6 +128,35 @@ internal static class DrainStore
         return true;
     }
 
+    /// <summary>
+    /// Sets the drain to lapse at <paramref name="until"/>, keeping when and by whom it was started, only when it is
+    /// still <paramref name="owned"/>. Returns whether it did.
+    /// </summary>
+    public static async Task<bool> HoldOwnedAsync(
+        IDataContext context,
+        DrainRow owned,
+        DateTimeOffset until,
+        CancellationToken ct
+    )
+    {
+        var row = await context
+            .Drains.FirstOrDefaultAsync(d => d.Id == DrainRow.SingletonId, ct)
+            .ConfigureAwait(false);
+        if (row is null || !SameDrain(row, owned))
+            return false;
+        row.Until = until.UtcDateTime;
+        try
+        {
+            await context.SaveChanges(ct).ConfigureAwait(false);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            context.Reset();
+            return false;
+        }
+        return true;
+    }
+
     /// <summary>Whether <paramref name="row"/> is the drain <paramref name="other"/> was read as: same start, same actor.</summary>
     public static bool SameDrain(DrainRow row, DrainRow other) =>
         row.StartedAt == other.StartedAt

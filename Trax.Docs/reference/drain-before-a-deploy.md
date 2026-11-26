@@ -67,9 +67,12 @@ what the old hosts still run; a run its host's stop cuts off is failed by the st
 
 ## When a deploy dies
 
-A deploy that is interrupted or crashes after draining leaves a drain that lapses on its own: at the timeout plus 10
-minutes. Until then the hosts start nothing new; Resume in the console ends it at once. A scheduler host that starts
-meanwhile leaves it in place.
+A deploy that is interrupted or crashes after draining leaves a drain that lapses on its own. Once the drain has
+finished waiting it holds for as long as the roll, and a rollback the deploy drives, can take: on Kubernetes ten
+minutes per Deployment for each, plus ten; on ECS an hour, since the circuit breaker's rollback runs inside the stack
+update; on compose and podman ten minutes. A drain that never finished waiting lapses at its timeout plus that. Until
+then the hosts start nothing new; Resume in the console ends it at once. A scheduler host that starts meanwhile leaves
+it in place.
 
 ## From the console or the API
 

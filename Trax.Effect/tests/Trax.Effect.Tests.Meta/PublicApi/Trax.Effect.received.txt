@@ -199,12 +199,14 @@ namespace Trax.Effect.Configuration.Deploy
         public const string Argument = "--trax-drain";
         public const string DeployActor = "deploy";
         public const string ForceVariable = "TRAX_DRAIN_FORCE";
+        public const string HoldVariable = "TRAX_DRAIN_HOLD";
         public const string ResumeArgument = "--trax-resume";
         public static readonly System.TimeSpan DefaultTimeout;
         public static readonly System.TimeSpan Margin;
         public static readonly System.TimeSpan MaximumTimeout;
         public static bool Requested { get; }
         public static bool ForceRequested(string? value) { }
+        public static System.TimeSpan HoldIn(string? value) { }
         public static System.TimeSpan ParseTimeout(string value, string paramName) { }
         public static bool RequestedIn(System.Collections.Generic.IReadOnlyList<string> args) { }
         public static bool ResumeRequestedIn(System.Collections.Generic.IReadOnlyList<string> args) { }

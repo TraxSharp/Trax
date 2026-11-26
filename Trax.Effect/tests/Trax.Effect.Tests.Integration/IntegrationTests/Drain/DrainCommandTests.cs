@@ -44,8 +44,6 @@ public class DrainCommandTests : TestSetup
     [Test]
     public async Task With_nothing_busy_the_drain_returns_and_stays_for_the_roll()
     {
-        var before = TimeProvider.System.GetUtcNow();
-
         await DrainCommand.DrainAsync(
             Scope.ServiceProvider,
             TimeSpan.FromMinutes(10),
@@ -62,9 +60,64 @@ public class DrainCommandTests : TestSetup
             .SpecifyKind(row.NotNull().Until, DateTimeKind.Utc)
             .Should()
             .BeCloseTo(
-                (before + TimeSpan.FromMinutes(10) + TraxDrain.Margin).UtcDateTime,
+                (TimeProvider.System.GetUtcNow() + TraxDrain.Margin).UtcDateTime,
                 TimeSpan.FromMinutes(1),
-                "the drain lapses at the timeout plus the margin"
+                "the drain holds for the roll from when it returned, the margin by default"
+            );
+    }
+
+    [Test]
+    public async Task A_drain_sets_the_hold_from_when_it_returns_keeping_its_start()
+    {
+        var hold = TimeSpan.FromHours(2);
+        var drain = DrainCommand.DrainAsync(
+            Scope.ServiceProvider,
+            TimeSpan.FromSeconds(30),
+            hold,
+            force: false,
+            settle: TimeSpan.Zero,
+            poll: Fast,
+            CancellationToken.None
+        );
+        await UntilRow();
+        var set = (await Row()).NotNull();
+
+        await drain;
+
+        var row = (await Row()).NotNull();
+        row.StartedAt.Should().Be(set.StartedAt, "it is the same drain, held longer");
+        DateTime
+            .SpecifyKind(row.Until, DateTimeKind.Utc)
+            .Should()
+            .BeCloseTo(
+                (TimeProvider.System.GetUtcNow() + hold).UtcDateTime,
+                TimeSpan.FromMinutes(1),
+                "the roll starts when the drain returns, and the hold covers it from then"
+            );
+    }
+
+    [Test]
+    public async Task Forced_past_the_timeout_the_drain_is_held_from_then()
+    {
+        await Run(TrainState.InProgress);
+        var hold = TimeSpan.FromHours(2);
+
+        await DrainCommand.DrainAsync(
+            Scope.ServiceProvider,
+            TimeSpan.FromMilliseconds(200),
+            hold,
+            force: true,
+            settle: TimeSpan.Zero,
+            poll: Fast,
+            CancellationToken.None
+        );
+
+        DateTime
+            .SpecifyKind((await Row()).NotNull().Until, DateTimeKind.Utc)
+            .Should()
+            .BeCloseTo(
+                (TimeProvider.System.GetUtcNow() + hold).UtcDateTime,
+                TimeSpan.FromMinutes(1)
             );
     }
 
@@ -391,6 +444,27 @@ public class DrainCommandTests : TestSetup
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
             .WithMessage("*TRAX_DRAIN_FORCE*");
+        (await Row()).Should().BeNull();
+    }
+
+    [Test]
+    public async Task RunTraxAsync_refuses_a_bad_hold_value_before_draining()
+    {
+        var host = new UnstartedHost(Scope.ServiceProvider);
+
+        var act = async () =>
+            await host.RunTraxAsync(
+                    args: [TraxDrain.Argument],
+                    processExportPath: null,
+                    processMigrates: false,
+                    CancellationToken.None,
+                    processArgs: null,
+                    forceVariable: null,
+                    holdVariable: "an hour"
+                )
+                .ConfigureAwait(false);
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*TRAX_DRAIN_HOLD*");
         (await Row()).Should().BeNull();
     }
 

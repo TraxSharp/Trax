@@ -799,7 +799,9 @@ a flag in the database that stops every host starting new work (the dispatcher d
 manager queues no scheduled run, no worker claims a job) and waits for what is busy to finish, runs and machine
 instances alike. Nothing outside reaches the app to do it. Once the hosts are replaced, `--trax-resume` ends the
 drain. A hub that starts leaves it in place: a drain a failed resume or a crashed deploy left behind ends with Resume
-on the console's scheduler page, or lapses on its own after the timeout plus ten minutes. A first deploy has nothing to drain and skips it. [Drain before a deploy](/docs/reference/drain-before-a-deploy) explains
+on the console's scheduler page, or lapses on its own once the roll's own time has passed after the drain finished
+waiting (on Kubernetes ten minutes per Deployment for the roll and again for a rollback, plus ten; on ECS an hour;
+on compose and podman ten minutes). A first deploy has nothing to drain and skips it. [Drain before a deploy](/docs/reference/drain-before-a-deploy) explains
 what counts as busy and what to do when a deploy refuses; [TraxDrain](/docs/sdk-reference/configuration/trax-drain) has the
 arguments.
 
@@ -1097,7 +1099,8 @@ strategy it had) and is waited on, and one this deploy created is deleted. The e
 and ends with what was done. The migration is not undone: the version before it served while it ran, so it must
 already work on the new schema. A first deploy has nothing to go back to and is left as it is. If the rollback itself
 does not roll out, the error says the services are in between versions. A deploy you interrupt (Ctrl-C) is not rolled
-back, and its drain is not ended: it lapses after the timeout plus ten minutes, or Resume on the console's scheduler
+back, and its drain is not ended: it lapses once the roll and a rollback could have run (ten minutes per Deployment
+for each, plus ten, after the drain finished waiting), or Resume on the console's scheduler
 page ends it. Restarting a hub does not.
 
 Services, Deployments and the StatefulSet are applied server-side under the field manager `trax`. Every object

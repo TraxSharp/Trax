@@ -79,6 +79,22 @@ public class TraxDrainTests
         act.Should().Throw<InvalidOperationException>().WithMessage("*TRAX_DRAIN_FORCE*'1'*");
     }
 
+    [TestCase(null, 600)]
+    [TestCase(" ", 600)]
+    [TestCase("00:45:00", 2700)]
+    public void The_hold_variable_reads_a_time_span_or_the_margin(string? value, int seconds) =>
+        TraxDrain.HoldIn(value).Should().Be(TimeSpan.FromSeconds(seconds));
+
+    [TestCase("45")]
+    [TestCase("00:00:00")]
+    [TestCase("2.00:00:00")]
+    public void A_hold_that_is_not_one_second_to_a_day_refuses_to_start(string value)
+    {
+        var act = () => TraxDrain.HoldIn(value);
+
+        act.Should().Throw<InvalidOperationException>().WithMessage($"*TRAX_DRAIN_HOLD*'{value}'*");
+    }
+
     [Test]
     public void A_drain_process_does_not_migrate_even_when_nothing_says_skip() =>
         TraxMigrate

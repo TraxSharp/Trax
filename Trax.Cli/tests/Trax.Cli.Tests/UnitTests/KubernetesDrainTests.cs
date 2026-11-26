@@ -1,3 +1,4 @@
+using System.Globalization;
 using AwesomeAssertions;
 using k8s.Models;
 using Trax.Cli.Deploy;
@@ -110,6 +111,35 @@ public class KubernetesDrainTests
                 [m.Migrate, m.Drain, Deployment(m, "hub"), m.Resume],
                 "the plan lists them in the order the deploy runs them"
             );
+    }
+
+    [Test]
+    public void The_drain_Job_holds_the_drain_for_every_Deployments_roll_and_rollback()
+    {
+        var m = Render();
+        var deployments = m.Services.OfType<V1Deployment>().Count();
+
+        deployments.Should().BeGreaterThan(1);
+        Has(
+                Env(m.Drain),
+                TraxDrain.HoldVariable,
+                KubernetesDeployer
+                    .DrainHold(deployments)
+                    .ToString("c", CultureInfo.InvariantCulture)
+            )
+            .Should()
+            .BeTrue(
+                "a forced roll and its rollback wait up to the rollout timeout per Deployment each"
+            );
+        KubernetesDeployer
+            .DrainHold(deployments)
+            .Should()
+            .Be(
+                KubernetesDeployer.RolloutTimeout * (2 * deployments)
+                    + KubernetesDeployer.ResumeTimeout
+                    + KubernetesDeployer.DrainJobSlack
+            );
+        Has(Env(m.Resume), TraxDrain.HoldVariable).Should().BeFalse();
     }
 
     [Test]
