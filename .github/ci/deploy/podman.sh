@@ -29,6 +29,14 @@ cleanup() {
   if [ "$status" -ne 0 ]; then
     say "state at failure"
     systemctl --user --no-pager status "$STACK-*" 2>/dev/null | tail -n 60 || true
+    # The own journal of each unit that failed or was restarted, start to end: the tail of the shared journal shows
+    # the retry, not the first failure.
+    for unit in $(systemctl --user --no-pager --plain --no-legend list-units --all "$STACK-*.service" 2>/dev/null | awk '{print $1}'); do
+      [ "$(systemctl --user show -p NRestarts --value "$unit" 2>/dev/null)" != 0 ] \
+        || [ "$(systemctl --user show -p Result --value "$unit" 2>/dev/null)" != success ] || continue
+      say "journal of $unit"
+      journalctl --user --no-pager -o short-precise -u "$unit" 2>/dev/null | grep -v 'Copying blob' | head -n 120 || true
+    done
     journalctl --user --no-pager -n 80 2>/dev/null || true
   fi
   systemctl --user stop "$STACK-*.service" 2>/dev/null || true
