@@ -486,6 +486,9 @@ internal static class PodmanTarget
             ?? [];
         if (pod.InitContainers is not { Count: > 0 })
             return;
+        // kube play under --userns=nomap cannot start a container in a pod that shares its PID namespace (crun 1.31:
+        // "open `.`: Permission denied"), so here the sidecar does not see the app's processes.
+        pod.ShareProcessNamespace = null;
         foreach (var sidecar in sidecars)
         {
             pod.InitContainers.Remove(sidecar);

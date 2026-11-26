@@ -16,6 +16,7 @@ What it does and how to run it by hand: [`Trax.Docs/reference/egress-image.md`](
 | `internal/resolver/` | The DNS server: allowed names forwarded as a fresh query, every other name NXDOMAIN. |
 | `internal/proxy/` | Where every app TCP connection lands: TCP entries by resolved address, everything else by SNI. |
 | `internal/check/` | The probes a stack runs from inside the pod. |
+| `internal/peers/` | The processes in the pod that run as the egress uid: `serve` refuses to start beside one and stops when one appears. |
 | `seccomp/` | The app containers' seccomp profile, its generator and the default it is generated from. |
 | `test/e2e.sh` | The image in real network namespaces under rootless podman. CI runs it. |
 
@@ -35,6 +36,7 @@ test/e2e.sh localhost/trax-egress:dev
 ## Rules that are easy to break
 
 - **The app must never share the egress uid (61000).** The rules let that uid out; `serve` refuses any other, and
+  refuses to run while another process it can see (one outside its own mount namespace) runs as it, and
   `check` refuses that one.
 - **The rules fail closed.** The table's output policy is drop, and the sidecar only adds the way out. A change that
   makes anything depend on the sidecar running to stay blocked is wrong.

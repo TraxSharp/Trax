@@ -38,6 +38,9 @@ domains, which is what an app that calls one model API and one package feed need
 - **Split in two, fail closed.** `rules` runs once with NET_ADMIN as root and exits: an nftables table whose
   output policy is drop, sending every process's DNS to the resolver and its IPv4 TCP to the proxy, except the
   egress uid's (61000). `serve` runs as that uid with no capability. If it is not running, nothing leaves.
+  `serve` refuses to start while another process in the pod runs as 61000, and exits when one appears; the app
+  shares its PID namespace (`shareProcessNamespace` on Kubernetes, `pid` on compose) so it can see them. It does not
+  override the app's uid, so an image with a `USER` of its own keeps it.
   Compose has no init container, so `run` applies the rules, gives up root and every capability, and serves.
 - **Names, not addresses.** The resolver answers A queries for listed names only (a fresh query upstream, nothing
   else of the app's carried over) and NXDOMAIN for everything else, which closes DNS tunnelling. The proxy reads the
@@ -87,15 +90,21 @@ domains, which is what an app that calls one model API and one package feed need
 - A `tcp:` entry, and every host `TRAX_EGRESS_POSTGRES` names, is an address allowlist, the thing rejected above
   for TLS. It is meant for single-tenant or private destinations; on a shared endpoint (a managed Postgres pooler,
   a cloud API) it reaches every tenant behind the address.
-- The app must not run as uid 61000. The admission policy refuses `runAsUser: 61000` to anything but the sidecar;
-  an image whose own `USER` is 61000 is not something a policy can see.
+- The app must not run as uid 61000. The admission policy refuses `runAsUser: 61000` to anything but the sidecar,
+  and the sidecar refuses to serve beside a process of that uid, which catches an image whose own `USER` is 61000.
+  It looks once a second, so a process that switches to the uid has up to a second before the sidecar stops, and on
+  Kubernetes the app keeps running, unready, once it has. Under `podman kube play` the pod cannot share its PID
+  namespace (rootless podman under `--userns=nomap`), so there the sidecar sees nothing but itself.
+- The app can list the sidecar's processes and read their command lines. Their environment and open files stay
+  closed to it: those need the sidecar's uid.
 - The image is built for amd64 only until the release builds more.
 
 ## Exemplars
 
 **Enforced elsewhere:** the `egress` CI suite runs the Go tests (`internal/*/..._test.go`) and `test/e2e.sh`, which
 runs the image in real network namespaces and proves what it allows and refuses, with a positive control on every
-run. In Trax.Cli, `EgressContractTests` holds the uid, ports and commands the CLI renders to the ones the image
+run, and that the sidecar stops beside a process of its uid in another container while its own probes do not stop
+it. In Trax.Cli, `EgressContractTests` holds the uid, ports and commands the CLI renders to the ones the image
 uses, and `DeployEgressTests` holds every target to its answer: the sidecar on compose and Kubernetes, the policy
 beside it, the refusal on ECS. The `deploy-cluster` job's `.github/ci/deploy/cluster.sh` deploys a held hub to k3s
 (with `hostUsers: false` and the namespace's network policies) and runs the check inside its pod, and tries the
@@ -104,6 +113,7 @@ container adding `SYS_PTRACE`.
 
 ## Changelog
 
+- **2026-11-25**: The sidecar refuses to serve beside another process of the egress uid, in a shared PID namespace.
 - **2026-11-25**: The admission policy allows the previous egress image while the services roll.
 - **2026-11-25**: The admission policy refuses the egress uid to every container but the sidecar.
 - **2026-11-25**: Said that a `tcp:` entry is an address allowlist, for single-tenant destinations only.

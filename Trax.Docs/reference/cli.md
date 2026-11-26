@@ -770,9 +770,9 @@ Every target says what it does with it:
 
 | Target | Egress |
 |---|---|
-| compose | A sidecar, `<service>-egress`, applies the rules, gives up root and every capability, and serves; the service joins its network namespace (`network_mode: "service:<service>-egress"`) and starts once it is healthy. A hub's port is published on the sidecar, which owns the namespace. A held service runs one copy: its copies would share the sidecar's namespace and its ports, so a `count` over 1 is refused. |
-| kubernetes | An init container, `egress-rules`, applies the rules as root with `NET_ADMIN` and nothing else, and exits; a native sidecar, `egress` (an init container with `restartPolicy: Always`), serves as uid 61000 with no capability, and the app starts once its startup probe passes. A ValidatingAdmissionPolicy keeps `NET_ADMIN` to that init container. |
-| kubernetes, `runtime: podman` | The same pod, with the sidecar as an ordinary container, since `kube play` does not run native sidecars. |
+| compose | A sidecar, `<service>-egress`, applies the rules, gives up root and every capability, and serves; the service joins its network and PID namespaces (`network_mode: "service:<service>-egress"`, `pid: "container:<app>-<service>-egress"`) and starts once it is healthy. A hub's port is published on the sidecar, which owns the namespace. A held service runs one copy: its copies would share the sidecar's namespace and its ports, so a `count` over 1 is refused. |
+| kubernetes | An init container, `egress-rules`, applies the rules as root with `NET_ADMIN` and nothing else, and exits; a native sidecar, `egress` (an init container with `restartPolicy: Always`), serves as uid 61000 with no capability, and the app starts once its startup probe passes. The pod shares one PID namespace (`shareProcessNamespace: true`). A ValidatingAdmissionPolicy keeps `NET_ADMIN` to that init container. |
+| kubernetes, `runtime: podman` | The same pod, with the sidecar as an ordinary container, since `kube play` does not run native sidecars, and without the shared PID namespace, which rootless podman cannot start under `--userns=nomap`. |
 
 The rules container and the sidecar each get 128 MiB of memory (as request and limit on Kubernetes), whatever the
 service's `memory` says, so a held app cannot grow the sidecar into the node's memory. Past it the sidecar is killed
@@ -781,9 +781,11 @@ none it has no limit, and on Kubernetes the app container has no request either.
 | aws (ECS) | Refused, naming the service: Fargate gives a task no `NET_ADMIN`, so the rules cannot be applied. Use the kubernetes target on EKS. |
 
 The migration, the drain and the resume run the migrator's code, so each is held to the migrator's `egress` too. The app must not run as uid
-61000, which the rules let out. On a cluster the admission policy refuses any container but the egress sidecar that
-asks for it (`runAsUser`). Nothing can see an image's own `USER`, so do not build one that is 61000
-(`ContainerUser` in the project); trax renders none.
+61000, which the rules let out. The sidecar refuses to start while another process in the pod runs as 61000, and
+exits when one appears, so an image whose own `USER` is 61000 (`ContainerUser` in the project) fails its health check
+instead of running unheld. It sees the app's processes on compose and Kubernetes, where the app shares its PID
+namespace, and not under `runtime: podman`. On a cluster the admission policy also refuses any container but the
+egress sidecar that asks for the uid (`runAsUser`).
 
 `init` makes a service of every web or console project under the directory that references a `Trax.*` package,
 leaving out test projects, and refuses to replace an existing file without `--force`. `init --target aws` adds a

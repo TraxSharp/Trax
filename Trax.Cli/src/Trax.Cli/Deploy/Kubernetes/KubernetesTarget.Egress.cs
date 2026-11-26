@@ -67,6 +67,9 @@ internal static partial class KubernetesTarget
             var rules = RulesContainer(image, vars);
             var sidecar = SidecarContainer(image, vars);
             pod.Spec.InitContainers = [rules, sidecar];
+            // One PID namespace, so the sidecar sees the app's processes: it refuses to serve beside one that runs as
+            // the egress uid, which the rules let out.
+            pod.Spec.ShareProcessNamespace = true;
             foreach (var c in pod.Spec.InitContainers)
                 pod.Metadata.Annotations[$"{SeccompAnnotation}/{c.Name}"] = "runtime/default";
             pod.Spec.Volumes ??=

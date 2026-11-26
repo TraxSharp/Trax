@@ -75,6 +75,21 @@ public partial class DeployEgressTests
     }
 
     [Test]
+    public void Compose_puts_the_held_service_in_its_sidecars_process_namespace()
+    {
+        // The sidecar refuses to serve beside a process of the egress uid, and it can see the service's processes
+        // only from one PID namespace. podman compose passes pid through as written, so it names the container.
+        var compose = Compose();
+
+        Block(compose, "hub-egress").Should().Contain("container_name: orders-hub-egress");
+        foreach (var service in new[] { "hub", "migrate", "drain", "resume" })
+            Block(compose, service)
+                .Should()
+                .Contain("pid: \"container:orders-hub-egress\"", service);
+        Block(compose, "worker").Should().NotContain("pid:");
+    }
+
+    [Test]
     public void Compose_keeps_every_capability_dropped_on_the_held_service()
     {
         var hub = Block(Compose(), "hub");
@@ -119,7 +134,7 @@ public partial class DeployEgressTests
 
         var compose = Compose(file);
 
-        compose.Should().NotContain("egress").And.NotContain("network_mode");
+        compose.Should().NotContain("egress").And.NotContain("network_mode").And.NotContain("pid:");
     }
 
     [Test]

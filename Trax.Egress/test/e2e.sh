@@ -4,9 +4,12 @@
 #
 #   1. a pod as Kubernetes runs it: `rules` as root with NET_ADMIN once, then `serve` as the egress uid, then the
 #      check as an app uid with no capabilities;
-#   2. a pod as compose runs it: `run` (rules, then root and every capability given up, then serve);
-#   3. the same pod with its sidecar stopped: nothing leaves at all (the rules fail closed).
+#   2. the same pod with its sidecar stopped: nothing leaves at all (the rules fail closed);
+#   3. a process of the egress uid in another container of that pod: the sidecar stops, and refuses to start beside it;
+#   4. containers as compose runs them: `run` (rules, then root and every capability given up, then serve), the app
+#      joining the sidecar's network and PID namespaces, and the same stop when a process of the egress uid appears.
 #
+# The app shares one PID namespace with the sidecar, as trax deploy renders it, so the sidecar sees its processes.
 # Each pod sits on a network of its own with a "database" (listed, must open) and an "other" service on the same
 # port (not listed, must stay blocked), so the in-cluster allowance and the LAN refusal are both exercised.
 #
@@ -26,7 +29,8 @@ app_uid=1654
 fail=0
 
 cleanup() {
-  podman pod rm -f -t 0 "$name-k8s" "$name-compose" >/dev/null 2>&1 || true
+  podman pod rm -f -t 0 "$name-k8s" >/dev/null 2>&1 || true
+  podman rm -f -t 0 "$name-intruder" "$name-compose-egress" >/dev/null 2>&1 || true
   podman rm -f -t 0 "$name-database" "$name-other" >/dev/null 2>&1 || true
   podman network rm -f "$name" >/dev/null 2>&1 || true
 }
@@ -66,26 +70,42 @@ wait_ready() {
   done
 }
 
+# check <name> <how to join it>: the check as the app, in the namespaces of the pod or container named.
 check() {
-  if podman run --rm --pod "$1" --user "$app_uid:$app_uid" --cap-drop ALL --security-opt no-new-privileges \
+  label=$1
+  shift
+  if podman run --rm "$@" --user "$app_uid:$app_uid" --cap-drop ALL --security-opt no-new-privileges \
     -e TRAX_EGRESS_ALLOW="$allow" -e TRAX_EGRESS_CHECK_DENY="$deny" "$image" check; then
-    echo "-> $1: as intended"
+    echo "-> $label: as intended"
   else
-    echo "!! $1: the check failed; the sidecar's log:"
-    podman logs --tail 40 "$1-egress" 2>&1 | grep -v '^[[:space:]]' || true
+    echo "!! $label: the check failed; the sidecar's log:"
+    podman logs --tail 40 "$label-egress" 2>&1 | grep -v '^[[:space:]]' || true
     fail=1
   fi
 }
 
 say "kubernetes shape: rules, then serve, then the check as the app"
+# One PID namespace for the pod, as shareProcessNamespace gives it. Without --userns=nomap: rootless podman (crun
+# 1.31) cannot start a container in a pod that shares its PID namespace under nomap. A cluster's pod with
+# hostUsers: false gets its user namespace from the kubelet, not from rootless podman, and is not affected.
 # shellcheck disable=SC2086 # pod_dns is a list of options
-podman pod create --name "$name-k8s" --network "$name" --userns=nomap $pod_dns >/dev/null
+podman pod create --name "$name-k8s" --network "$name" --share net,ipc,uts,pid $pod_dns >/dev/null
 podman run --rm --pod "$name-k8s" --user 0:0 --cap-drop ALL --cap-add NET_ADMIN --security-opt no-new-privileges \
   -e TRAX_EGRESS_ALLOW="$allow" "$image" rules
 podman run -d --pod "$name-k8s" --name "$name-k8s-egress" --cap-drop ALL --security-opt no-new-privileges \
   --read-only -e TRAX_EGRESS_ALLOW="$allow" "$image" serve >/dev/null
 wait_ready "$name-k8s-egress"
-check "$name-k8s"
+check "$name-k8s" --pod "$name-k8s"
+running() { [ "$(podman inspect -f '{{.State.Running}}' "$1" 2>/dev/null)" = true ]; }
+# The control for the uid watch below: the probes podman execs in the sidecar run as its uid, and the app's check
+# ran beside it, and neither stopped it.
+if running "$name-k8s-egress"; then
+  echo "-> the sidecar kept serving beside its own probes and the app"
+else
+  echo "!! the sidecar stopped beside its own probes or the app:"
+  podman logs --tail 5 "$name-k8s-egress" 2>&1 || true
+  fail=1
+fi
 
 say "the check refuses to run as the egress's own uid"
 if podman run --rm --pod "$name-k8s" --user 61000:61000 --cap-drop ALL -e TRAX_EGRESS_ALLOW="$allow" "$image" check \
@@ -120,10 +140,43 @@ else
   echo "-> nothing left the pod"
 fi
 
+say "a process of the egress uid in another container: the sidecar stops, and refuses to start beside it"
+podman start "$name-k8s-egress" >/dev/null
+wait_ready "$name-k8s-egress"
+podman run -d --pod "$name-k8s" --name "$name-intruder" --user 61000:61000 --cap-drop ALL --entrypoint sleep \
+  "$image" 120 >/dev/null
+i=0
+while running "$name-k8s-egress" && [ "$i" -lt 15 ]; do
+  i=$((i + 1))
+  sleep 1
+done
+if running "$name-k8s-egress"; then
+  echo "!! the sidecar kept serving beside a process of its uid"
+  fail=1
+elif podman logs "$name-k8s-egress" 2>&1 | grep -q 'runs as the egress uid'; then
+  echo "-> stopped: $(podman logs "$name-k8s-egress" 2>&1 | grep 'runs as the egress uid' | tail -n 1)"
+else
+  echo "!! the sidecar stopped for another reason:"
+  podman logs --tail 5 "$name-k8s-egress" 2>&1 || true
+  fail=1
+fi
+if out=$(podman run --rm --pod "$name-k8s" --cap-drop ALL --security-opt no-new-privileges --read-only \
+  -e TRAX_EGRESS_ALLOW="$allow" "$image" serve 2>&1); then
+  echo "!! serve started beside a process of its uid"
+  fail=1
+elif echo "$out" | grep -q 'runs as the egress uid'; then
+  echo "-> refused to start"
+else
+  echo "!! serve failed for another reason: $out"
+  fail=1
+fi
+podman rm -f -t 0 "$name-intruder" >/dev/null
+
 say "compose shape: run applies the rules, gives up root, and serves"
+# As compose runs it: containers of their own, each with a user namespace (userns_mode: nomap), the app joining the
+# sidecar's network and PID namespaces (network_mode and pid).
 # shellcheck disable=SC2086 # pod_dns is a list of options
-podman pod create --name "$name-compose" --network "$name" --userns=nomap $pod_dns >/dev/null
-podman run -d --pod "$name-compose" --name "$name-compose-egress" --user 0:0 --cap-drop ALL \
+podman run -d --network "$name" $pod_dns --userns=nomap --name "$name-compose-egress" --user 0:0 --cap-drop ALL \
   --cap-add NET_ADMIN --cap-add SETUID --cap-add SETGID --security-opt no-new-privileges --read-only \
   -e TRAX_EGRESS_ALLOW="$allow" "$image" run >/dev/null
 wait_ready "$name-compose-egress"
@@ -135,15 +188,38 @@ else
   echo "!! the sidecar kept root or a capability"
   fail=1
 fi
-check "$name-compose"
+compose_join="--userns=nomap --network container:$name-compose-egress --pid container:$name-compose-egress"
+# shellcheck disable=SC2086 # compose_join is a list of options
+check "$name-compose" $compose_join
 
 say "an invalid list stops the rules step, so the pod never starts"
-if podman run --rm --pod "$name-compose" --user 0:0 --cap-drop ALL --cap-add NET_ADMIN \
+# shellcheck disable=SC2086 # compose_join is a list of options
+if podman run --rm $compose_join --user 0:0 --cap-drop ALL --cap-add NET_ADMIN \
   -e TRAX_EGRESS_ALLOW="*.github.com" "$image" rules >/dev/null 2>&1; then
   echo "!! a wildcard was accepted"
   fail=1
 else
   echo "-> refused"
+fi
+
+say "compose shape: a process of the egress uid in the app's container stops the sidecar"
+# shellcheck disable=SC2086 # compose_join is a list of options
+podman run -d $compose_join --name "$name-intruder" --user 61000:61000 --cap-drop ALL --entrypoint sleep \
+  "$image" 120 >/dev/null
+i=0
+while running "$name-compose-egress" && [ "$i" -lt 15 ]; do
+  i=$((i + 1))
+  sleep 1
+done
+if running "$name-compose-egress"; then
+  echo "!! the sidecar kept serving beside a process of its uid"
+  fail=1
+elif podman logs "$name-compose-egress" 2>&1 | grep -q 'runs as the egress uid'; then
+  echo "-> stopped"
+else
+  echo "!! the sidecar stopped for another reason:"
+  podman logs --tail 5 "$name-compose-egress" 2>&1 || true
+  fail=1
 fi
 
 if [ "$fail" -ne 0 ]; then

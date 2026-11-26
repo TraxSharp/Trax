@@ -173,7 +173,7 @@ internal static class ComposeTarget
         y.AppendLine("    environment: *trax");
         // The migration runs the migrator's code, so it is held to the migrator's egress.
         if (held)
-            y.AppendLine($"    network_mode: \"service:{SidecarName(migrator)}\"");
+            JoinSidecar(y, file, migrator);
         Hardened(y, ServiceHardening.Trax(file.Services[migrator]), podman);
         y.AppendLine("    depends_on:");
         y.AppendLine("      database:");
@@ -203,6 +203,23 @@ internal static class ComposeTarget
         $"{service}-{DeployEgress.SidecarContainer}";
 
     /// <summary>
+    /// The sidecar's container: <c>&lt;app&gt;-&lt;service&gt;-egress</c>. The held service joins its PID namespace by
+    /// this name, since podman compose passes <c>pid</c> to podman as written and podman knows no <c>service:</c>.
+    /// </summary>
+    internal static string SidecarContainerName(DeployFile file, string service) =>
+        $"{file.App}-{SidecarName(service)}";
+
+    /// <summary>
+    /// The lines that put a held service in its sidecar's network and PID namespaces. The sidecar refuses to serve
+    /// beside a process of the egress uid, and sees the service's processes only from one PID namespace.
+    /// </summary>
+    private static void JoinSidecar(StringBuilder y, DeployFile file, string service)
+    {
+        y.AppendLine($"    network_mode: \"service:{SidecarName(service)}\"");
+        y.AppendLine($"    pid: \"container:{SidecarContainerName(file, service)}\"");
+    }
+
+    /// <summary>
     /// The sidecar that holds <paramref name="name"/> to its egress. Compose has no init container, so it runs
     /// <c>run</c>: it applies the rules as root with NET_ADMIN, gives up root and every capability, and serves; the
     /// service joins its network namespace and starts once it is ready. It owns the namespace, so the service's port
@@ -210,6 +227,7 @@ internal static class ComposeTarget
     /// </summary>
     private static void AppendSidecar(
         StringBuilder y,
+        DeployFile file,
         string name,
         DeployService service,
         Egress egress,
@@ -222,6 +240,7 @@ internal static class ComposeTarget
             $"  # Holds {name} to the domains it names; {name} joins this service's network namespace."
         );
         y.AppendLine($"  {SidecarName(name)}:");
+        y.AppendLine($"    container_name: {SidecarContainerName(file, name)}");
         y.AppendLine($"    image: {egress.Image}");
         // Root only to apply the rules; the process gives it up, and every capability, before it serves.
         y.AppendLine("    user: \"0:0\"");
@@ -287,7 +306,7 @@ internal static class ComposeTarget
         y.AppendLine($"      {TraxDrain.ForceVariable}: ${{{TraxDrain.ForceVariable}:-false}}");
         // The drain runs the migrator's code, so it is held to the migrator's egress, as the migration is.
         if (held)
-            y.AppendLine($"    network_mode: \"service:{SidecarName(migrator)}\"");
+            JoinSidecar(y, file, migrator);
         Hardened(y, ServiceHardening.Trax(file.Services[migrator]), podman);
         y.AppendLine("    depends_on:");
         y.AppendLine("      migrate:");
@@ -318,7 +337,7 @@ internal static class ComposeTarget
         y.AppendLine("      <<: *trax");
         y.AppendLine($"      {TraxMigrate.Variable}: {TraxMigrate.SkipValue}");
         if (held)
-            y.AppendLine($"    network_mode: \"service:{SidecarName(migrator)}\"");
+            JoinSidecar(y, file, migrator);
         Hardened(y, ServiceHardening.Trax(file.Services[migrator]), podman);
         y.AppendLine("    depends_on:");
         foreach (var name in file.Services.Keys)
@@ -357,7 +376,7 @@ internal static class ComposeTarget
             var sidecar = service.Egress is not null ? egress : null;
             var held = sidecar is not null;
             if (sidecar is not null)
-                AppendSidecar(y, name, service, sidecar, podman, port);
+                AppendSidecar(y, file, name, service, sidecar, podman, port);
             y.AppendLine();
             y.AppendLine($"  {name}:");
             y.AppendLine($"    image: {Image(file, name)}");
@@ -365,7 +384,7 @@ internal static class ComposeTarget
             y.AppendLine("      <<: *trax");
             y.AppendLine($"      {TraxMigrate.Variable}: {TraxMigrate.SkipValue}");
             if (held)
-                y.AppendLine($"    network_mode: \"service:{SidecarName(name)}\"");
+                JoinSidecar(y, file, name);
             else if (port is { } p)
             {
                 y.AppendLine("    ports:");

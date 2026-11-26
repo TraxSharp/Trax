@@ -26,6 +26,7 @@ import (
 	"github.com/TraxSharp/Trax/Trax.Egress/internal/allow"
 	"github.com/TraxSharp/Trax/Trax.Egress/internal/check"
 	"github.com/TraxSharp/Trax/Trax.Egress/internal/logx"
+	"github.com/TraxSharp/Trax/Trax.Egress/internal/peers"
 	"github.com/TraxSharp/Trax/Trax.Egress/internal/privs"
 	"github.com/TraxSharp/Trax/Trax.Egress/internal/proxy"
 	"github.com/TraxSharp/Trax/Trax.Egress/internal/resolvconf"
@@ -41,6 +42,9 @@ const (
 	DNSPort   = 15053
 	ProxyPort = 15001
 )
+
+// How often serve looks for another process in the pod running as its uid.
+const peerScan = time.Second
 
 // version is set at build time.
 var version = "dev"
@@ -125,6 +129,13 @@ func serve() error {
 	if err := privs.NoCapabilities(); err != nil {
 		return err
 	}
+	// The rules let this uid out unredirected, so no other process in the pod may run as it. The pod shares one PID
+	// namespace, so the app's processes are visible here; serve refuses to start beside one, and stops if one
+	// appears later (the app starts after the sidecar).
+	scan := func() ([]peers.Process, error) { return peers.Foreign("/proc", UID, os.Getpid()) }
+	if err := peers.Refuse(scan); err != nil {
+		return err
+	}
 	list, err := allow.Read()
 	if err != nil {
 		return err
@@ -175,7 +186,13 @@ func serve() error {
 	if err != nil {
 		return err
 	}
-	errs := make(chan error, 2*len(pcs)+1)
+	errs := make(chan error, 2*len(pcs)+2)
+	go func() { errs <- peers.Watch(ctx, peerScan, scan) }()
+	if os.Getpid() == 1 {
+		// Under compose the app joins this container's PID namespace, where this process is the first: what the app
+		// leaves behind is reparented here and must be reaped. serve starts no child of its own.
+		go reap(ctx)
+	}
 	for i := range pcs {
 		pc, l := pcs[i], dls[i]
 		go func() { errs <- dns.ServeUDP(ctx, pc) }()
@@ -196,6 +213,26 @@ func serve() error {
 	}
 	pl.Close()
 	return err
+}
+
+// reap waits for every child that exits, as the first process of a PID namespace must.
+func reap(ctx context.Context) {
+	children := make(chan os.Signal, 1)
+	signal.Notify(children, syscall.SIGCHLD)
+	defer signal.Stop(children)
+	for {
+		for {
+			pid, err := syscall.Wait4(-1, nil, syscall.WNOHANG, nil)
+			if pid <= 0 || err != nil {
+				break
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-children:
+		}
+	}
 }
 
 func ready() error {

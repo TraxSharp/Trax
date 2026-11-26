@@ -87,14 +87,28 @@ exits non-zero, so a pod with a bad list never starts. An empty list allows noth
 | Command | Runs as | Does |
 |---|---|---|
 | `rules` | root, `NET_ADMIN` only | Applies the table and exits. An init container. |
-| `serve` | uid 61000, no capabilities | Runs the resolver (`127.0.0.1:15053`) and the proxy (`127.0.0.1:15001`). Refuses to start as any other uid. The image's default. |
+| `serve` | uid 61000, no capabilities | Runs the resolver (`127.0.0.1:15053`) and the proxy (`127.0.0.1:15001`). Refuses to start as any other uid, or while another process it can see runs as 61000, and stops when one appears. The image's default. |
 | `run` | root, `NET_ADMIN`, `SETUID`, `SETGID` | `rules`, then gives up root and every capability (and checks they are gone), then `serve`. For compose, which has no init container. |
 | `ready` | any | Exits 0 when the resolver and the proxy are listening. A startup probe or a healthcheck. |
 | `check` | the app's uid | Probes from inside the pod. See [Proving it](#proving-it). |
 
-The app must not run as uid 61000: the rules let that uid out. On Kubernetes, the admission policy `trax deploy`
-writes refuses a pod or container other than the sidecar that sets `runAsUser: 61000`. An image whose own `USER` is
-61000 cannot be seen by the policy, so it is on whoever builds the image.
+The app must not run as uid 61000: the rules let that uid out. `serve` looks for one every second, in every
+process of the PID namespace it is in, and counts a process as its own only when it is in the sidecar's own mount
+namespace (itself and the `ready` probe). It refuses to start beside another, and exits when one appears; the pod or
+the stack then fails its health check instead of running. That covers an image whose own `USER` is 61000, which no
+policy can see, and a process that switches to it later. It works only when the app shares the sidecar's PID
+namespace: `shareProcessNamespace: true` on Kubernetes, `pid: "container:<sidecar>"` under compose. `trax deploy`
+renders both. Under `podman kube play` it cannot (rootless podman will not start a pod that shares its PID namespace
+under `--userns=nomap`), so there the sidecar sees only its own container.
+
+Sharing the PID namespace lets the app list the sidecar's processes and read their command lines and status, which
+are world-readable. Their environment, open files and root directory are not: reading them needs the same uid as
+the sidecar and no fewer capabilities, which the app does not have. Under compose the sidecar is the namespace's
+first process, so it reaps what the app leaves behind, and when it exits every process in the namespace goes with
+it.
+
+On Kubernetes, the admission policy `trax deploy` writes also refuses a pod or container other than the sidecar that
+sets `runAsUser: 61000`.
 
 ## Running it beside a stack
 
@@ -103,6 +117,7 @@ Under compose, as `trax deploy` writes it, the app joins the sidecar's network n
 ```yaml
 services:
   app-egress:
+    container_name: app-egress
     image: ghcr.io/traxsharp/trax-egress@sha256:<digest>
     user: "0:0"
     command: ["run"]
@@ -122,12 +137,14 @@ services:
   app:
     image: my-app
     network_mode: "service:app-egress"
+    pid: "container:app-egress"
     depends_on:
       app-egress:
         condition: service_healthy
 ```
 
-Ports the app serves are published on the sidecar, since it owns the namespace. On Kubernetes, `rules` is an init
+Ports the app serves are published on the sidecar, since it owns the namespace. `pid` names the container rather
+than the service because podman compose passes it to podman as written, and podman knows no `service:`. On Kubernetes, `rules` is an init
 container and `serve` a native sidecar (an init container with `restartPolicy: Always`) with `ready` as its startup
 probe; `trax deploy --target kubernetes` renders both and the admission policy that allows `NET_ADMIN` on the first
 alone. `podman kube play` does not run native sidecars (it waits for every init container to exit), so there the

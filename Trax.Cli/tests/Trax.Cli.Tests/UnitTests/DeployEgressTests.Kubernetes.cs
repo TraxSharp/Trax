@@ -93,6 +93,19 @@ public partial class DeployEgressTests
     }
 
     [Test]
+    public void Kubernetes_shares_one_process_namespace_in_a_held_pod()
+    {
+        // The sidecar refuses to serve beside a process of the egress uid, which it sees only when the pod shares
+        // one PID namespace.
+        var m = Cluster();
+
+        PodOf(m, "hub").ShareProcessNamespace.Should().BeTrue();
+        foreach (var job in new[] { m.Migrate, m.Drain, m.Resume })
+            job.Spec.Template.Spec.ShareProcessNamespace.Should().BeTrue();
+        PodOf(m, "worker").ShareProcessNamespace.Should().BeNull();
+    }
+
+    [Test]
     public void Kubernetes_gives_a_service_without_egress_no_init_containers()
     {
         var m = Cluster();
@@ -405,6 +418,23 @@ public partial class DeployEgressTests
             .Spec.Template.Metadata.Annotations[PodmanTarget.InitContainerTypeAnnotation]
             .Should()
             .Be("always", "the rules run again on every start of the pod, not only its first");
+    }
+
+    [Test]
+    public void Podman_leaves_the_process_namespace_unshared()
+    {
+        // kube play under --userns=nomap cannot start a pod that shares its PID namespace (crun 1.31: "open `.`:
+        // Permission denied"), so on podman the sidecar does not see the app's processes.
+        var hub = Podman(HeldOnPodman())
+            .Files.Single(f =>
+                string.Equals(f.Path, "orders-home-hub.yaml", StringComparison.Ordinal)
+            )
+            .Content;
+        var deployment = KubernetesYaml.Deserialize<V1Deployment>(
+            hub[hub.IndexOf("apiVersion", StringComparison.Ordinal)..]
+        );
+
+        deployment.Spec.Template.Spec.ShareProcessNamespace.Should().BeNull();
     }
 
     [Test]
