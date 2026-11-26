@@ -660,7 +660,7 @@ internal static class DeployKubernetesCommands
         [
             // The resume ends the drain this release set, so it runs only when the drain exited 0: a failed migration
             // drained nothing, and a refused drain ended its own or left another actor's in place.
-            $"  {PodmanTarget.Podman} kube play --replace {stack.SecretPath} && {Play(KubernetesTarget.MigrateName)} "
+            $"  {PodmanTarget.PlaySecret(stack.SecretPath, stack.SecretPath)} && {Play(KubernetesTarget.MigrateName)} "
                 + $"&& test \"$({PodmanTarget.Podman} wait {migrate})\" = 0 && {Play(KubernetesTarget.DrainName)} "
                 + $"&& test \"$({PodmanTarget.Podman} wait {drain})\" = 0 && {{ {restart}; "
                 + $"{Play(KubernetesTarget.ResumeName)} && {PodmanTarget.Podman} wait {resume} >/dev/null; }}; "

@@ -1366,7 +1366,7 @@ the unit that runs a changed migration. A release that changes only the app's im
 running and says so:
 
 ```text
-/usr/bin/podman kube play --replace ~/.config/trax/orders-home/secret.yaml && /usr/bin/podman kube play --replace --userns=nomap --network orders-home .trax/deploy/podman/orders-home/orders-home-migrate.yaml && test "$(/usr/bin/podman wait orders-home-migrate-pod-migrate)" = 0 && /usr/bin/podman kube play --replace --userns=nomap --network orders-home .trax/deploy/podman/orders-home/orders-home-drain.yaml && test "$(/usr/bin/podman wait orders-home-drain-pod-drain)" = 0 && { systemctl --user restart orders-home-hub.service orders-home-reports.service orders-home-worker.service; /usr/bin/podman kube play --replace --userns=nomap --network orders-home .trax/deploy/podman/orders-home/orders-home-resume.yaml && /usr/bin/podman wait orders-home-resume-pod-resume >/dev/null; }; ...
+/usr/bin/flock ~/.config/trax/orders-home/secret.lock /usr/bin/podman kube play --replace ~/.config/trax/orders-home/secret.yaml && /usr/bin/podman kube play --replace --userns=nomap --network orders-home .trax/deploy/podman/orders-home/orders-home-migrate.yaml && test "$(/usr/bin/podman wait orders-home-migrate-pod-migrate)" = 0 && /usr/bin/podman kube play --replace --userns=nomap --network orders-home .trax/deploy/podman/orders-home/orders-home-drain.yaml && test "$(/usr/bin/podman wait orders-home-drain-pod-drain)" = 0 && { systemctl --user restart orders-home-hub.service orders-home-reports.service orders-home-worker.service; /usr/bin/podman kube play --replace --userns=nomap --network orders-home .trax/deploy/podman/orders-home/orders-home-resume.yaml && /usr/bin/podman wait orders-home-resume-pod-resume >/dev/null; }; ...
 The migration runs first, then the drain stops every host starting new work and waits for what is busy; the restart, then the end of the drain, run only once both exit 0. ...
 Unchanged, left running: orders-home-database.
 Each restarted service stops before its new version starts, so it is down for that moment; for no downtime, deploy to a cluster.
@@ -1378,7 +1378,8 @@ runs on the schema it was built for, and the restart and the resume pod after it
 failed migration or a refused drain never ends a drain this release did not set. Past the timeout
 `podman logs orders-home-drain-pod-drain` lists what was still busy; `--force` writes the drain pod to roll anyway.
 A first release, or one that restarts only Postgres or RabbitMQ, does not drain. A changed network or changed
-Secrets restart every unit, since each unit plays the Secrets before its pod. A service
+Secrets restart every unit, since each unit plays the Secrets before its pod; every play holds
+`secret.lock` beside them, since units that start together would otherwise replace one Secret over each other. A service
 the stack no longer has (RabbitMQ after the last host stops using it, say) is stopped and its unit removed. A
 restarted unit stops its pod before the new one starts, so a release here always has a moment without that service;
 for none, deploy to a cluster, one machine included (see [one machine, no downtime](/docs/reference/deploy-to-one-machine-with-no-downtime)).

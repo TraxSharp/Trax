@@ -18,6 +18,9 @@ public class PodmanDrainTests
     private const string Tag = "20261124-120000-abcdef123456";
     private const string Dir = "/src/.trax/deploy/podman/orders-home";
     private const string SecretPath = "/home/u/.config/trax/orders-home/secret.yaml";
+    private const string PlaySecrets =
+        "/usr/bin/flock /home/u/.config/trax/orders-home/secret.lock /usr/bin/podman kube play --replace "
+        + SecretPath;
 
     private static PodmanStack Render(string tag = Tag, bool force = false) =>
         PodmanTarget.Render(
@@ -76,7 +79,7 @@ public class PodmanDrainTests
         );
         drain
             .Should()
-            .StartWith($"  {PodmanTarget.Podman} kube play --replace {SecretPath} && ")
+            .StartWith($"  {PlaySecrets} && ")
             .And.Contain(
                 "test \"$(/usr/bin/podman wait orders-home-drain-pod-drain)\" = 0 && { systemctl --user restart "
             );

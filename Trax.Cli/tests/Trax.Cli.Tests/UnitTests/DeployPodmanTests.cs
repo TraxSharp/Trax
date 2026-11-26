@@ -25,6 +25,7 @@ public partial class DeployPodmanTests
     private const string Stack = "orders-home";
     private const string Dir = "/src/.trax/deploy/podman/orders-home";
     private const string SecretPath = "/home/u/.config/trax/orders-home/secret.yaml";
+    private const string Locked = "/usr/bin/flock /home/u/.config/trax/orders-home/secret.lock";
 
     private string _dir = "";
     private string _config = "";
@@ -215,7 +216,7 @@ public partial class DeployPodmanTests
         ExecStartPre(hub)
             .Should()
             .Equal(
-                $"/usr/bin/podman kube play --replace {SecretPath}",
+                $"{Locked} /usr/bin/podman kube play --replace {SecretPath}",
                 "/bin/sh -c 'for i in $$(seq 120); do /usr/bin/podman exec orders-home-database-pod-database "
                     + "pg_isready -q -U orders && exit 0; sleep 1; done; echo \"the database did not become "
                     + "ready\" >&2; exit 1'",
@@ -236,7 +237,26 @@ public partial class DeployPodmanTests
             .Contain("Requires=orders-home-hub.service\nAfter=orders-home-hub.service\n")
             .And.NotContain("PublishPort")
             .And.NotContain("migrate");
-        ExecStartPre(worker).Should().Equal($"/usr/bin/podman kube play --replace {SecretPath}");
+        ExecStartPre(worker)
+            .Should()
+            .Equal($"{Locked} /usr/bin/podman kube play --replace {SecretPath}");
+    }
+
+    [Test]
+    public void Every_unit_plays_the_secrets_under_one_lock()
+    {
+        // Units start together and each plays the Secrets with --replace; unlocked, two plays tear the Secret down and
+        // create it over each other and one fails with "secret name in use".
+        var units = Files(Render()).Where(f => f.Key.EndsWith(".kube", StringComparison.Ordinal)).ToList();
+
+        units.Should().NotBeEmpty();
+        foreach (var (name, unit) in units)
+            ExecStartPre(unit)
+                .Where(l => l.Contains("kube play --replace " + SecretPath, StringComparison.Ordinal))
+                .Should()
+                .ContainSingle(name)
+                .Which.Should()
+                .StartWith(Locked, name);
     }
 
     [Test]

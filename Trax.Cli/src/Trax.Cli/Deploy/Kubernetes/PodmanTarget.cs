@@ -25,6 +25,9 @@ internal static class PodmanTarget
     /// <summary>The podman binary the units call, where Quadlet itself finds it.</summary>
     public const string Podman = "/usr/bin/podman";
 
+    /// <summary>util-linux's flock, which every play of the stack's Secrets runs under.</summary>
+    public const string Flock = "/usr/bin/flock";
+
     /// <summary>How long a unit may take to start, the migration included: thirty minutes, as on a cluster.</summary>
     public const int StartTimeoutSeconds = 1800;
 
@@ -63,6 +66,18 @@ internal static class PodmanTarget
     /// </summary>
     public static string NextProxySecretPath(string secretPath) =>
         Path.Combine(Path.GetDirectoryName(secretPath) ?? ".", "tailnet.next.yaml");
+
+    /// <summary>The lock every play of the stack's Secrets holds, beside them.</summary>
+    public static string SecretLockPath(string secretPath) =>
+        Path.Combine(Path.GetDirectoryName(secretPath) ?? ".", "secret.lock");
+
+    /// <summary>
+    /// Plays <paramref name="file"/>, a file of the stack's Secrets, under <see cref="SecretLockPath"/>. Every unit plays
+    /// the Secrets before it starts and a release starts them together: two <c>kube play --replace</c> of one Secret at
+    /// once tear it down and create it over each other, and one fails with "secret name in use".
+    /// </summary>
+    public static string PlaySecret(string file, string secretPath) =>
+        $"{Flock} {SecretLockPath(secretPath)} {Podman} kube play --replace {file}";
 
     public static PodmanStack Render(
         DeployFile file,
@@ -673,9 +688,9 @@ internal static class PodmanTarget
                     )
                 );
             u.Append("\n[Service]\n")
-                .Append($"ExecStartPre={Podman} kube play --replace {secretPath}\n");
+                .Append($"ExecStartPre={PlaySecret(secretPath, secretPath)}\n");
             if (proxySecret is not null)
-                u.Append($"ExecStartPre={Podman} kube play --replace {proxySecret}\n");
+                u.Append($"ExecStartPre={PlaySecret(proxySecret, secretPath)}\n");
             if (migrate is not null)
                 Migrations(u, migrate);
             u.Append(
