@@ -142,7 +142,7 @@ echo "$out" | grep -q -- "-drain.yaml" || fail "a release that restarts the hub 
 cp "$DIR/.trax/deploy/podman/$STACK"/*.kube "$UNITS/"
 systemctl --user daemon-reload
 # As printed: the drain pod, the restart only once it exits 0, then the resume pod.
-( eval "$(echo "$out" | grep -E '^\s+(systemctl --user restart|\S*podman kube play)')" ) > "$DIR/.trax/install.log" 2>&1 &
+( eval "$(echo "$out" | grep -E '^\s+(systemctl --user restart|\S*podman kube play|\S*flock )')" ) > "$DIR/.trax/install.log" 2>&1 &
 install=$!
 for _ in $(seq 120); do
   podman logs "$STACK-drain-pod-drain" 2>/dev/null | grep -q 'still busy' && break
