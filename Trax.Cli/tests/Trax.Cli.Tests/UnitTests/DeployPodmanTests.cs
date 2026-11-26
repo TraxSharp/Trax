@@ -247,12 +247,16 @@ public partial class DeployPodmanTests
     {
         // Units start together and each plays the Secrets with --replace; unlocked, two plays tear the Secret down and
         // create it over each other and one fails with "secret name in use".
-        var units = Files(Render()).Where(f => f.Key.EndsWith(".kube", StringComparison.Ordinal)).ToList();
+        var units = Files(Render())
+            .Where(f => f.Key.EndsWith(".kube", StringComparison.Ordinal))
+            .ToList();
 
         units.Should().NotBeEmpty();
         foreach (var (name, unit) in units)
             ExecStartPre(unit)
-                .Where(l => l.Contains("kube play --replace " + SecretPath, StringComparison.Ordinal))
+                .Where(l =>
+                    l.Contains("kube play --replace " + SecretPath, StringComparison.Ordinal)
+                )
                 .Should()
                 .ContainSingle(name)
                 .Which.Should()
