@@ -138,7 +138,8 @@ jobs:
   build:
     needs: release
     if: needs.release.outputs.released == 'true'
-    runs-on: ubuntu-latest
+    # 24.04, as ci.yml's egress job: on 26.04 qemu-user-static is a virtual package apt will not install.
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
       contents: read

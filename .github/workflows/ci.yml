@@ -1333,7 +1333,8 @@ jobs:
     needs: changes
     if: contains(fromJSON(needs.changes.outputs.suite-names), 'egress')
     name: egress
-    runs-on: ubuntu-latest
+    # 24.04, as the release's build job: on 26.04 qemu-user-static is a virtual package apt will not install.
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     permissions:
       contents: read
