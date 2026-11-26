@@ -318,6 +318,45 @@ public partial class DeployEgressTests
     }
 
     [Test]
+    public void The_policy_refuses_setuid_and_privilege_escalation_in_a_held_pod()
+    {
+        // A container that keeps SETUID could switch to the egress uid after admission, and one that may gain
+        // privileges could exec a binary set-uid to it. In a pod with the egress rules, every container (init and
+        // ephemeral ones included) drops both and sets allowPrivilegeEscalation false. Pods without the rules (the
+        // in-cluster Postgres, whose entrypoint needs SETUID) are not held, so the uid gets them nothing.
+        var policy = Cluster().Admission.OfType<V1ValidatingAdmissionPolicy>().Single();
+
+        policy
+            .Spec.Variables.Single(v => string.Equals(v.Name, "held", StringComparison.Ordinal))
+            .Expression.Should()
+            .Be("variables.inits.exists(c, c.name == 'egress-rules')");
+        var setid = policy.Spec.Validations.Single(v =>
+            v.Expression.Contains("SETUID", StringComparison.Ordinal)
+        );
+        setid
+            .Expression.Should()
+            .StartWith("!variables.held || (variables.containers + variables.inits).all(c, ")
+            .And.Contain("c.securityContext.allowPrivilegeEscalation == false")
+            .And.Contain("'ALL' in c.securityContext.capabilities.drop")
+            .And.Contain("'SETUID' in c.securityContext.capabilities.drop")
+            .And.Contain("'SETGID' in c.securityContext.capabilities.drop")
+            .And.Contain("!('SETUID' in ")
+            .And.Contain("!('SETGID' in ");
+        setid.Message.Should().Contain("SETUID").And.Contain("allowPrivilegeEscalation");
+
+        // Everything trax renders in a held pod already passes.
+        var pod = PodOf(Cluster(), "hub");
+        foreach (var c in pod.Containers.Concat(pod.InitContainers))
+        {
+            c.SecurityContext.AllowPrivilegeEscalation.Should().BeFalse(c.Name);
+            c.SecurityContext.Capabilities.Drop.Should().Equal(["ALL"], c.Name);
+            (c.SecurityContext.Capabilities.Add ?? [])
+                .Should()
+                .NotContain(["SETUID", "SETGID"], c.Name);
+        }
+    }
+
+    [Test]
     public void Kubernetes_without_egress_renders_no_policy_and_no_init_containers()
     {
         var m = KubernetesTarget.Render(

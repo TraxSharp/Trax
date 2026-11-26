@@ -108,7 +108,8 @@ first process, so it reaps what the app leaves behind, and when it exits every p
 it.
 
 On Kubernetes, the admission policy `trax deploy` writes also refuses a pod or container other than the sidecar that
-sets `runAsUser: 61000`.
+sets `runAsUser: 61000`, and in a held pod any container, ephemeral ones included, that keeps `SETUID` or `SETGID`
+or may gain privileges, since such a process could switch to 61000 after admission.
 
 ## Running it beside a stack
 

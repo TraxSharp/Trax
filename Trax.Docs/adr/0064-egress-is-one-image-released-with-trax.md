@@ -59,7 +59,9 @@ domains, which is what an app that calls one model API and one package feed need
   container, init containers included, so a namespace with egress cannot be held by PSA. The policy allows
   NET_ADMIN only on an init container named `egress-rules` running this image's digest with no command and the
   argument `rules`, and refuses it (and any capability outside the baseline set) everywhere else. It refuses
-  `runAsUser: 61000` to every container but the egress sidecar. While a deploy that changes the egress image rolls
+  `runAsUser: 61000` to every container but the egress sidecar, and in a pod with the egress rules it requires every
+  container, ephemeral ones included, to drop SETUID and SETGID and set `allowPrivilegeEscalation: false`, so nothing
+  there can switch to that uid after admission. While a deploy that changes the egress image rolls
   the services, the policy allows the image they ran before as well, since a roll and a rollback still create the
   old version's pods; a roll that succeeds narrows it to the new image.
 - **ECS refuses `"egress"`.** Fargate allows no NET_ADMIN, so the rules cannot be applied; the Kubernetes target
@@ -108,11 +110,14 @@ it. In Trax.Cli, `EgressContractTests` holds the uid, ports and commands the CLI
 uses, and `DeployEgressTests` holds every target to its answer: the sidecar on compose and Kubernetes, the policy
 beside it, the refusal on ECS. The `deploy-cluster` job's `.github/ci/deploy/cluster.sh` deploys a held hub to k3s
 (with `hostUsers: false` and the namespace's network policies) and runs the check inside its pod, and tries the
-admission policy with NET_ADMIN on an app container, a rules container of another image and a `kubectl debug`
-container adding `SYS_PTRACE`.
+admission policy with NET_ADMIN on an app container, a rules container of another image, a `kubectl debug`
+container adding `SYS_PTRACE`, and, in a held pod, an app container and a `kubectl debug` container that keep
+`SETUID`.
 
 ## Changelog
 
+- **2026-11-25**: In a held pod the admission policy refuses a container that keeps SETUID or SETGID or may gain
+  privileges.
 - **2026-11-25**: The sidecar refuses to serve beside another process of the egress uid, in a shared PID namespace.
 - **2026-11-25**: The admission policy allows the previous egress image while the services roll.
 - **2026-11-25**: The admission policy refuses the egress uid to every container but the sidecar.

@@ -334,6 +334,15 @@ set -e
 echo "$out" | grep -q "ValidatingAdmissionPolicy 'trax-egress-$NS'" ||
   fail "an ephemeral container adding SYS_PTRACE was not refused: $out"
 echo "refused: an ephemeral container adding SYS_PTRACE"
+# The baseline profile adds nothing and drops nothing, so its container keeps SETUID and could become the egress uid,
+# which the rules let out.
+set +e
+out=$(kubectl -n "$NS" debug "pod/$hub_pod" --image="$egress_image" --container=egress-setuid --profile=baseline \
+  --attach=false --quiet -- /usr/local/bin/trax-egress check 2>&1)
+set -e
+echo "$out" | grep -q "drop SETUID and SETGID" ||
+  fail "an ephemeral container keeping SETUID in a held pod was not refused: $out"
+echo "refused: an ephemeral container keeping SETUID in a held pod"
 
 # The check, as an ephemeral container in a pod, running as the app would (no capability, not the egress uid): what
 # the pod's list allows opens, and an unlisted name, DNS to an outside resolver, metadata, the private ranges, the
@@ -370,6 +379,7 @@ refused() {
   set -e
   echo "$out" | grep -q "ValidatingAdmissionPolicy 'trax-egress-$NS'" ||
     fail "$2 was not refused by the policy: $out"
+  [ -z "${3:-}" ] || echo "$out" | grep -q "$3" || fail "$2 was refused for another reason: $out"
   echo "refused: $2"
 }
 refused '{"containers":[{"name":"app","image":"busybox","securityContext":{"capabilities":{"add":["NET_ADMIN"]}}}]}' \
@@ -381,5 +391,8 @@ refused '{"containers":[{"name":"app","image":"busybox","securityContext":{"runA
   "an app container running as the egress uid"
 refused '{"securityContext":{"runAsUser":61000},"containers":[{"name":"app","image":"busybox"}]}' \
   "a pod running as the egress uid"
+rules='{"name":"egress-rules","image":"'"$egress_image"'","args":["rules"],"securityContext":{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"],"add":["NET_ADMIN"]}}}'
+refused '{"initContainers":['"$rules"'],"containers":[{"name":"app","image":"busybox"}]}' \
+  "an app container keeping SETUID in a held pod" "drop SETUID and SETGID"
 
 say "cluster: every check passed"

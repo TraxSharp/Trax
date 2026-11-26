@@ -163,8 +163,11 @@ internal static partial class KubernetesTarget
     /// one init container: named <c>egress-rules</c>, running exactly <paramref name="image"/> (by digest) with its
     /// own entrypoint and the one argument <c>rules</c>, not a sidecar, adding NET_ADMIN and nothing else. It also
     /// refuses a privileged container and the host's network, PID and IPC namespaces, as baseline does, and
-    /// <c>runAsUser</c> 61000 (the uid the rules let out) on the pod or on any container but the egress sidecar. It
-    /// applies to every pod created or changed in the namespace, an ephemeral container added for debugging included.
+    /// <c>runAsUser</c> 61000 (the uid the rules let out) on the pod or on any container but the egress sidecar. In a
+    /// pod held to an egress list (one with the rules init container) every container must drop SETUID and SETGID and
+    /// set <c>allowPrivilegeEscalation: false</c>, so nothing in it can switch to that uid after admission; trax
+    /// renders every container that way, the rules container included, so it needs no exception. It applies to every
+    /// pod created or changed in the namespace, an ephemeral container added for debugging included.
     /// <paramref name="previous"/> are egress images the services ran before this deploy: their pods are still
     /// created while the services roll and when they roll back, so the deployer allows them until the roll succeeds.
     /// </summary>
@@ -261,6 +264,12 @@ internal static partial class KubernetesTarget
                 },
                 new V1Variable
                 {
+                    Name = "held",
+                    Expression =
+                        $"variables.inits.exists(c, c.name == '{DeployEgress.RulesContainer}')",
+                },
+                new V1Variable
+                {
                     Name = "egressImages",
                     Expression = $"[{string.Join(", ", images.Select(i => $"'{i}'"))}]",
                 },
@@ -314,6 +323,18 @@ internal static partial class KubernetesTarget
 
     /// <summary>The egress uid, as the policy writes it.</summary>
     private static string EgressUid => DeployEgress.Uid.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// A container that cannot change its uid, in CEL: it may not gain privileges, drops SETUID and SETGID (or every
+    /// capability) and adds neither back.
+    /// </summary>
+    private const string NoSetId =
+        "has(c.securityContext) && has(c.securityContext.allowPrivilegeEscalation) && "
+        + "c.securityContext.allowPrivilegeEscalation == false && "
+        + "has(c.securityContext.capabilities) && has(c.securityContext.capabilities.drop) && "
+        + "('ALL' in c.securityContext.capabilities.drop || "
+        + "('SETUID' in c.securityContext.capabilities.drop && 'SETGID' in c.securityContext.capabilities.drop)) && "
+        + $"!('SETUID' in {Adds}) && !('SETGID' in {Adds})";
 
     /// <summary>A container that does not ask to run as the egress uid, in CEL.</summary>
     private static string NotEgressUid =>
@@ -369,6 +390,16 @@ internal static partial class KubernetesTarget
                     + "has(c.restartPolicy) && c.restartPolicy == 'Always'))",
                 Message =
                     $"Only the egress sidecar may run as uid {EgressUid}: the egress rules let that uid out.",
+            },
+            new V1Validation
+            {
+                Expression =
+                    $"!variables.held || (variables.containers + variables.inits).all(c, {NoSetId})",
+                Message =
+                    "In a pod held to an egress list, every container must set allowPrivilegeEscalation: false and "
+                    + "drop SETUID and SETGID (or ALL) without adding them back: a process that can change its uid "
+                    + $"could become {EgressUid}, which the egress rules let out. With kubectl debug, use "
+                    + "--profile=restricted.",
             },
         ];
 }

@@ -1157,7 +1157,12 @@ to create them; Kubernetes 1.30 or later). On every pod created or changed there
   leaves both until the next deploy;
 - a privileged container, and a pod on the node's network, PID or IPC namespace;
 - a pod or container that sets `runAsUser: 61000`, the uid the egress rules let out, other than the `egress`
-  sidecar trax rendered.
+  sidecar trax rendered;
+- in a pod held to an egress list (one with the `egress-rules` init container), any container, init and ephemeral
+  ones included, that does not set `allowPrivilegeEscalation: false` and drop `SETUID` and `SETGID` (or `ALL`), or
+  adds either back. A process that can change its uid could become 61000 after admission. Every container trax
+  renders already does; for `kubectl debug` use `--profile=restricted`. Pods that are not held, such as Postgres in
+  the cluster, whose entrypoint needs `SETUID`, are not affected.
 
 A deploy refuses the policy or binding when another app wrote it, or something other than trax did. `destroy`
 deletes both. A deploy that no longer has a service with `egress` leaves them in place: they still refuse
