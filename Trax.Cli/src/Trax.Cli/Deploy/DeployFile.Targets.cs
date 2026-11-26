@@ -268,14 +268,21 @@ internal sealed partial class DeployFile
                         + "exposure runs. Rename the service."
                 )
             );
-        // The canary a cluster deploy applies and deletes again would take over a service of its name.
-        if (!podman && Services.ContainsKey(Kubernetes.KubernetesTailnet.CanaryName))
-            throw new InvalidOperationException(
-                problem(
-                    $"service '{Kubernetes.KubernetesTailnet.CanaryName}' takes the name of the listener a "
-                        + "tailnet deploy proves the edge's network policy against. Rename the service."
-                )
-            );
+        // The listeners a cluster deploy applies and deletes again would take over a service of their name.
+        foreach (
+            var listener in new[]
+            {
+                Kubernetes.KubernetesTailnet.CanaryName,
+                Kubernetes.KubernetesTailnet.ControlName,
+            }
+        )
+            if (!podman && Services.ContainsKey(listener))
+                throw new InvalidOperationException(
+                    problem(
+                        $"service '{listener}' takes the name of a listener a tailnet deploy proves the edge's "
+                            + "network policy with. Rename the service."
+                    )
+                );
         if (
             podman
             && Secrets.Contains(

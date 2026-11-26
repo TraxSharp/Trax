@@ -50,7 +50,9 @@ On a cluster two things hold that together:
 The secret does not stand in for the path. The edge adds it to whatever reaches it, so on a network plugin that
 accepts NetworkPolicy and ignores it, any pod in the cluster could hand the edge a login and be signed in. So before
 anything else runs, a tailnet deploy proves the plugin enforces the edge's policy: it starts a listener labelled as
-the edge, runs a probe from one of the app's own pods against it, and refuses to go on if the probe gets through.
+the edge and a control listener that is not, runs a probe from one of the app's own pods against both, and refuses
+to go on unless the probe reached the control and not the edge's listener. The control is what makes a refusal mean
+the policy held, rather than that the probe could not connect anywhere.
 
 On one host there are no network policies, so the path is held by where things listen. Tailscale runs in userspace
 networking there, and in that mode tailscaled hands any tailnet connection that serve does not take to `127.0.0.1` on

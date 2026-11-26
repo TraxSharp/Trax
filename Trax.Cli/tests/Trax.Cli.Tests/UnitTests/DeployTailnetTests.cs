@@ -117,15 +117,57 @@ public class DeployTailnetTests
             .Service.Spec.Selector[KubernetesTarget.NameLabel]
             .Should()
             .NotBe(KubernetesTailnet.EdgeName, "the canary must not take the edge's traffic");
+        var control = canary.Control.Spec.Template;
+        control.Metadata.Labels.Should().NotContainKey(KubernetesTailnet.RoleLabel);
+        control.Metadata.Labels[KubernetesTarget.AppLabel].Should().Be("orders");
+        foreach (var (key, value) in canary.ControlService.Spec.Selector)
+            control.Metadata.Labels.Should().Contain(key, value);
+        canary
+            .ControlService.Spec.Selector[KubernetesTarget.NameLabel]
+            .Should()
+            .Be(KubernetesTailnet.ControlName);
         string.Join(' ', probe.Spec.Containers.Single().Command)
             .Should()
-            .Contain($"{KubernetesTailnet.CanaryName}:{KubernetesTailnet.EdgePort}");
-        new[] { listener, probe }
+            .Contain($"{KubernetesTailnet.CanaryName}:{KubernetesTailnet.EdgePort}")
+            .And.Contain($"{KubernetesTailnet.ControlName}:{KubernetesTailnet.EdgePort}");
+        new[] { listener, control, probe }
             .SelectMany(t => t.Spec.Containers)
             .SelectMany(c => c.Env ?? [])
             .Should()
             .OnlyContain(v => v.ValueFrom == null, "neither holds a secret");
         m.All.Should().NotContain(o => o.Metadata.Name.Contains(KubernetesTailnet.CanaryName));
+        m.All.Should().NotContain(o => o.Metadata.Name.Contains(KubernetesTailnet.ControlName));
+    }
+
+    [Test]
+    public void The_policies_admit_the_probe_to_the_control_and_not_to_the_canary()
+    {
+        var m = Render();
+        var canary = m.TailnetCanary.NotNull();
+        var within = m.Policies.Single(p =>
+            string.Equals(p.Metadata.Name, "orders-within", StringComparison.Ordinal)
+        );
+        bool Selects(V1LabelSelector selector, IDictionary<string, string> labels) =>
+            selector.MatchLabels.All(l =>
+                labels.TryGetValue(l.Key, out var v)
+                && string.Equals(v, l.Value, StringComparison.Ordinal)
+            )
+            && (selector.MatchExpressions ?? [])
+                .Where(e =>
+                    string.Equals(e.OperatorProperty, "DoesNotExist", StringComparison.Ordinal)
+                )
+                .All(e => !labels.ContainsKey(e.Key));
+        var probe = canary.Probe.Spec.Template.Metadata.Labels;
+
+        Selects(within.Spec.PodSelector, canary.Control.Spec.Template.Metadata.Labels)
+            .Should()
+            .BeTrue();
+        Selects(within.Spec.Ingress.Single().FromProperty.Single().PodSelector, probe)
+            .Should()
+            .BeTrue();
+        Selects(within.Spec.PodSelector, canary.Listener.Spec.Template.Metadata.Labels)
+            .Should()
+            .BeFalse();
     }
 
     [Test]
@@ -488,17 +530,18 @@ public class DeployTailnetTests
             .WithMessage("*takes the name of the proxy*");
     }
 
-    [Test]
-    public void A_service_named_like_the_canary_is_refused()
+    [TestCase(KubernetesTailnet.CanaryName)]
+    [TestCase(KubernetesTailnet.ControlName)]
+    public void A_service_named_like_the_canary_is_refused(string name)
     {
         var file = Tailnet();
-        file.Services[KubernetesTailnet.CanaryName] = file.Services["reports"];
+        file.Services[name] = file.Services["reports"];
 
         var act = () => file.Environment("staging");
 
         act.Should()
             .Throw<InvalidOperationException>()
-            .WithMessage($"*'{KubernetesTailnet.CanaryName}'*proves the edge's network policy*");
+            .WithMessage($"*'{name}'*proves the edge's network policy*");
     }
 
     [TestCase("Trax__Deploy__Exposure", true)]
@@ -803,6 +846,17 @@ public class DeployTailnetTests
             .BeGreaterThan(calls.IndexOf(probe))
             .And.BeLessThan(calls.IndexOf("apply Service/database"));
         calls.Should().Contain($"delete Service/{KubernetesTailnet.CanaryName}");
+        calls
+            .IndexOf(probe)
+            .Should()
+            .BeGreaterThan(calls.IndexOf($"wait Deployment/{KubernetesTailnet.ControlName}"));
+        calls
+            .Should()
+            .Contain([
+                $"apply Service/{KubernetesTailnet.ControlName}",
+                $"delete Deployment/{KubernetesTailnet.ControlName}",
+                $"delete Service/{KubernetesTailnet.ControlName}",
+            ]);
     }
 
     [Test]

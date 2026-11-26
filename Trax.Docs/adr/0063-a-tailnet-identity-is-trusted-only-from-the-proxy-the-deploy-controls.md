@@ -74,8 +74,9 @@ it came by. Decided with the user on 2026-11-16 and 2026-11-17 (MS-21); this rec
   cluster, since nothing else holds it.
 - A subscription socket sees the tailnet caller only when the host makes the scheme its default.
 - Every kubernetes environment now runs under default-deny ingress, exposed or not.
-- A tailnet deploy on a cluster runs a canary and a probe Job before anything else, some seconds each time, and
-  refuses a cluster whose network plugin lets the probe through.
+- A tailnet deploy on a cluster runs a canary, a control listener and a probe Job before anything else, some seconds
+  each time, and refuses a cluster whose network plugin lets the probe through to the canary, or where the probe
+  cannot reach the control, since a probe that connects nowhere proves nothing.
 
 ## Exemplars
 
@@ -91,6 +92,8 @@ origin in, and `DeployTailnetTests` the canary a cluster deploy proves the edge'
 
 ## Changelog
 
+- **2026-11-25**: The canary probe must also reach a control listener the policies admit it to, so a probe that
+  cannot connect at all no longer passes.
 - **2026-11-25**: The proxy secret is rotated after the drain, not before it, and under podman only by the restart
   step.
 - **2026-11-25**: A tailnet deploy proves the network plugin enforces the edge's policy before it goes on; the secret

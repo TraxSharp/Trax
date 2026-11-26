@@ -84,7 +84,8 @@ systemd. It does not run ECS, EKS or any managed cluster; see
 4. Build and push the images.
 5. Apply the egress admission policy, when a service names egress.
 6. Apply the network policies. With a tailnet exposure, prove the network plugin enforces them: a probe from one of
-   the app's pods must not reach a listener labelled as the edge. If it does, the deploy stops with nothing exposed.
+   the app's pods must reach a control listener the policies admit it to and must not reach a listener labelled as
+   the edge. If it reaches the edge's, or never reaches the control, the deploy stops with nothing exposed.
 7. Bring up Postgres and RabbitMQ in the cluster, on the `try` profile.
 8. Run the migrate Job. If it fails, the deploy stops: no service has moved.
 9. If a service ran before, run the drain Job. If something is still busy at the timeout, the deploy stops, nothing

@@ -161,9 +161,10 @@ internal sealed class KubernetesDeployer(
     /// <summary>
     /// On a tailnet exposure, proves the cluster enforces the edge's NetworkPolicy before anything it protects runs:
     /// the edge adds the proxy secret to whatever reaches it, so on a plugin that ignores the policy any pod in the
-    /// cluster could sign in as anyone. Starts a listener labelled as the edge, runs a probe from one of the app's own
-    /// pods against it, and refuses the deploy unless the probe was kept out. The listener and its Service are deleted
-    /// either way; the Job is kept a day for its log.
+    /// cluster could sign in as anyone. Starts a listener labelled as the edge and a control listener that is not, runs
+    /// a probe from one of the app's own pods against both, and refuses the deploy unless the probe reached the control
+    /// and was kept out of the canary. The listeners and their Services are deleted either way; the Job is kept a day
+    /// for its log.
     /// </summary>
     private async Task ProveTailnetPolicyAsync(KubernetesManifests manifests, CancellationToken ct)
     {
@@ -175,7 +176,11 @@ internal sealed class KubernetesDeployer(
         KubernetesJobResult result;
         try
         {
-            await ApplyAndWaitAsync(ns, [canary.Listener, canary.Service], ct)
+            await ApplyAndWaitAsync(
+                    ns,
+                    [canary.Listener, canary.Service, canary.Control, canary.ControlService],
+                    ct
+                )
                 .ConfigureAwait(false);
             await cluster.CreateJobAsync(canary.Probe, ct).ConfigureAwait(false);
             result = await cluster
@@ -189,6 +194,8 @@ internal sealed class KubernetesDeployer(
                 {
                     canary.Listener,
                     canary.Service,
+                    canary.Control,
+                    canary.ControlService,
                 }
             )
                 await cluster
@@ -202,8 +209,8 @@ internal sealed class KubernetesDeployer(
         if (!result.Succeeded)
             throw new InvalidOperationException(
                 "The cluster does not enforce NetworkPolicy, or the probe could not tell: a pod of the app reached a "
-                    + "listener labelled as the tailnet edge, whose policy admits only the Tailscale operator's proxy. "
-                    + "The edge vouches for whoever reaches it, so nothing was exposed. Use a network plugin that "
+                    + "listener labelled as the tailnet edge, whose policy admits only the Tailscale operator's proxy, "
+                    + "or could not reach the control listener the policies admit it to. The edge vouches for whoever reaches it, so nothing was exposed. Use a network plugin that "
                     + "enforces NetworkPolicy (Calico, Cilium, the VPC CNI's network policy agent on EKS). The end of "
                     + $"the probe's log:\n{result.LogTail}\nAll of it: 'kubectl logs -n {ns} job/{job}'."
             );

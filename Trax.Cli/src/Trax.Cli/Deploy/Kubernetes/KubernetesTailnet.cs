@@ -25,27 +25,47 @@ internal static class KubernetesTailnet
     /// <summary>The name of the listener, and its Service, a deploy proves the edge's NetworkPolicy against.</summary>
     public const string CanaryName = "tailnet-canary";
 
+    /// <summary>
+    /// The name of the listener, and its Service, the probe must reach: an app pod the policies admit it to, so a
+    /// refusal of the canary means the policy held and not that the probe could not connect at all.
+    /// </summary>
+    public const string ControlName = "tailnet-control";
+
     /// <summary>The kind of the Job that must not reach the canary, in its name.</summary>
     public const string ProbeKind = "tailnet-probe";
 
     /// <summary>
-    /// What the probe runs, in the edge's image (busybox's <c>sh</c>, <c>nslookup</c> and <c>wget</c>). It exits 0
-    /// once three tries in a row fail to reach the canary, so a policy the plugin programs a moment late still passes;
-    /// 1 when every try for a minute reaches it; 2 when the canary's name does not resolve, which proves nothing.
+    /// What the probe runs, in the edge's image (busybox's <c>sh</c>, <c>nslookup</c> and <c>wget</c>). Each try first
+    /// fetches the control listener, which the policies admit the probe to, then the canary. It exits 0 once three
+    /// tries in a row reach the control and fail to reach the canary, so a policy the plugin programs a moment late
+    /// still passes; 1 when no such run of three happens in a minute; 2 when either name does not resolve; 3 when the
+    /// control never answered, since then a refusal of the canary proves nothing.
     /// </summary>
     public static readonly string ProbeScript = string.Join(
         '\n',
-        $"nslookup {CanaryName} >/dev/null 2>&1 || {{ echo \"{CanaryName} does not resolve\"; exit 2; }}",
-        "blocked=0",
+        $"for n in {CanaryName} {ControlName}; do",
+        "  nslookup \"$n\" >/dev/null 2>&1 || { echo \"$n does not resolve\"; exit 2; }",
+        "done",
+        "held=0",
+        "control=0",
         "for i in $(seq 30); do",
         string.Create(
             CultureInfo.InvariantCulture,
-            $"  if wget -q -T 3 -O /dev/null http://{CanaryName}:{EdgePort}/; then blocked=0; else blocked=$((blocked + 1)); fi"
+            $"  if wget -q -T 3 -O /dev/null http://{ControlName}:{EdgePort}/; then"
         ),
-        "  [ \"$blocked\" -ge 3 ] && { echo \"refused, as the policy says\"; exit 0; }",
+        "    control=1",
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"    if wget -q -T 3 -O /dev/null http://{CanaryName}:{EdgePort}/; then held=0; else held=$((held + 1)); fi"
+        ),
+        "  else",
+        "    held=0",
+        "  fi",
+        "  [ \"$held\" -ge 3 ] && { echo \"refused, as the policy says, while the control answered\"; exit 0; }",
         "  sleep 2",
         "done",
-        $"echo \"reached the canary on every try, from a pod the edge's policy does not admit\"",
+        $"[ \"$control\" = 1 ] || {{ echo \"never reached {ControlName}, which the policies admit the probe to, so a refusal proves nothing\"; exit 3; }}",
+        "echo \"reached the canary, from a pod the edge's policy does not admit\"",
         "exit 1"
     );
 

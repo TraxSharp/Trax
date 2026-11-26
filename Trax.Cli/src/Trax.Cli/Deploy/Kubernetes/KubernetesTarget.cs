@@ -759,46 +759,12 @@ internal static partial class KubernetesTarget
 
         /// <summary>
         /// What a tailnet deploy proves the network plugin with: a listener in the edge's image labelled as the edge, so
-        /// the edge's policy selects it and admits only the operator's proxy; its Service; and a Job, one of the app's
-        /// own pods (the most the policies admit anywhere), that must not reach it. Neither holds a secret.
+        /// the edge's policy selects it and admits only the operator's proxy; a control listener without that label,
+        /// which the policies admit the app's pods to; their Services; and a Job, one of the app's own pods (the most
+        /// the policies admit anywhere), that must reach the control and not the canary. None holds a secret.
         /// </summary>
         public KubernetesTailnetCanary TailnetCanary()
         {
-            const string name = KubernetesTailnet.CanaryName;
-            var listen = CanaryContainer(name);
-            listen.Args =
-            [
-                "caddy",
-                "respond",
-                "--listen",
-                string.Create(CultureInfo.InvariantCulture, $":{KubernetesTailnet.EdgePort}"),
-                "--body",
-                "canary",
-            ];
-            listen.Ports =
-            [
-                new V1ContainerPort { Name = "edge", ContainerPort = KubernetesTailnet.EdgePort },
-            ];
-            listen.ReadinessProbe = new V1Probe
-            {
-                TcpSocket = new V1TCPSocketAction { Port = KubernetesTailnet.EdgePort },
-                PeriodSeconds = 2,
-            };
-            var template = Pod(name, listen);
-            template.Metadata.Labels[KubernetesTailnet.RoleLabel] = KubernetesTailnet.EdgeRole;
-            var listener = new V1Deployment
-            {
-                ApiVersion = "apps/v1",
-                Kind = "Deployment",
-                Metadata = Meta(name),
-                Spec = new V1DeploymentSpec
-                {
-                    Replicas = 1,
-                    ProgressDeadlineSeconds = RolloutProgressDeadlineSeconds,
-                    Selector = new V1LabelSelector { MatchLabels = Selector(name) },
-                    Template = template,
-                },
-            };
             var probe = CanaryContainer(KubernetesTailnet.ProbeKind);
             probe.Command = ["/bin/sh", "-c", KubernetesTailnet.ProbeScript];
             var meta = Meta(JobName(file, KubernetesTailnet.ProbeKind, tag));
@@ -817,10 +783,55 @@ internal static partial class KubernetesTarget
                 },
             };
             return new KubernetesTailnetCanary(
-                listener,
-                Service(name, KubernetesTailnet.EdgePort),
+                CanaryListener(KubernetesTailnet.CanaryName, edge: true),
+                Service(KubernetesTailnet.CanaryName, KubernetesTailnet.EdgePort),
+                CanaryListener(KubernetesTailnet.ControlName, edge: false),
+                Service(KubernetesTailnet.ControlName, KubernetesTailnet.EdgePort),
                 job
             );
+        }
+
+        /// <summary>
+        /// Caddy answering on the edge's port, as one of the app's pods, labelled as the edge when
+        /// <paramref name="edge"/>.
+        /// </summary>
+        private V1Deployment CanaryListener(string name, bool edge)
+        {
+            var listen = CanaryContainer(name);
+            listen.Args =
+            [
+                "caddy",
+                "respond",
+                "--listen",
+                string.Create(CultureInfo.InvariantCulture, $":{KubernetesTailnet.EdgePort}"),
+                "--body",
+                name,
+            ];
+            listen.Ports =
+            [
+                new V1ContainerPort { Name = "edge", ContainerPort = KubernetesTailnet.EdgePort },
+            ];
+            listen.ReadinessProbe = new V1Probe
+            {
+                TcpSocket = new V1TCPSocketAction { Port = KubernetesTailnet.EdgePort },
+                PeriodSeconds = 2,
+            };
+            var template = Pod(name, listen);
+            if (edge)
+                template.Metadata.Labels[KubernetesTailnet.RoleLabel] = KubernetesTailnet.EdgeRole;
+            return new V1Deployment
+            {
+                ApiVersion = "apps/v1",
+                Kind = "Deployment",
+                Metadata = Meta(name),
+                Spec = new V1DeploymentSpec
+                {
+                    Replicas = 1,
+                    ProgressDeadlineSeconds = RolloutProgressDeadlineSeconds,
+                    Selector = new V1LabelSelector { MatchLabels = Selector(name) },
+                    Template = template,
+                },
+            };
         }
 
         /// <summary>A container in the edge's image, hardened as the edge is, holding nothing.</summary>

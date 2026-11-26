@@ -1228,11 +1228,13 @@ Beside the app it renders:
 
 Before anything else runs, right after the policies, a tailnet deploy proves the network plugin enforces them: it
 starts `tailnet-canary`, Caddy answering on 8081 with the edge's labels, so `<app>-tailnet` admits only the operator's
-proxy to it, and runs the Job `<app>-tailnet-probe-<tag>` from one of the app's own pods, which must fail to reach
-it three times in a row within a minute. If the probe gets through, the deploy stops, nothing is exposed, and the
-error ends with the probe's log: the edge vouches for whoever reaches it, so a plugin that ignores NetworkPolicy
-would let any pod in the cluster sign in as anyone. The canary and its Service are deleted either way; the Job is
-kept a day. A service named `tailnet` or `tailnet-canary` is refused in a tailnet environment, since the deploy
+proxy to it, and `tailnet-control`, the same without the edge's labels, which `<app>-within` admits the app's pods to.
+It then runs the Job `<app>-tailnet-probe-<tag>` from one of the app's own pods, which must reach the control and
+fail to reach the canary three tries in a row within a minute. The control is what makes a refusal mean something:
+a probe that cannot connect anywhere (no `wget`, a wrong port, a proxy in the way) fails too. If the probe gets
+through to the canary, or never reaches the control, the deploy stops, nothing is exposed, and the error ends with
+the probe's log: the edge vouches for whoever reaches it, so a plugin that ignores NetworkPolicy would let any pod in
+the cluster sign in as anyone. The listeners and their Services are deleted either way; the Job is kept a day. A service named `tailnet`, `tailnet-canary` or `tailnet-control` is refused in a tailnet environment, since the deploy
 applies its own objects under those names.
 
 trax writes that Secret itself, with a new random value on every deploy (32 bytes, base64url), after the drain and
