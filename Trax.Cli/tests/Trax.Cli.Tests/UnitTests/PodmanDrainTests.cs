@@ -72,7 +72,7 @@ public class PodmanDrainTests
             .Should()
             .StartWith($"  {PodmanTarget.Podman} kube play --replace {SecretPath} && ")
             .And.Contain(
-                "test \"$(/usr/bin/podman wait orders-home-drain-pod-drain)\" = 0 && systemctl --user restart "
+                "test \"$(/usr/bin/podman wait orders-home-drain-pod-drain)\" = 0 && { systemctl --user restart "
             );
         var migrated = drain.IndexOf(
             "test \"$(/usr/bin/podman wait orders-home-migrate-pod-migrate)\" = 0 && ",
@@ -85,21 +85,29 @@ public class PodmanDrainTests
             .Should()
             .BeGreaterThan(drain.IndexOf("orders-home-migrate.yaml", StringComparison.Ordinal))
             .And.BeLessThan(drain.IndexOf("orders-home-drain.yaml", StringComparison.Ordinal));
-        var resume = Array.FindIndex(
-            lines,
-            l => l.Contains("orders-home-resume.yaml", StringComparison.Ordinal)
-        );
-        resume.Should().BeGreaterThan(Array.IndexOf(lines, drain));
+        // The resume belongs to the drain this release set: a migration that failed drained nothing, and a drain that
+        // refused, or found another drain in its place, leaves that one alone.
+        drain
+            .Should()
+            .Contain(
+                "test \"$(/usr/bin/podman wait orders-home-drain-pod-drain)\" = 0 && { systemctl --user restart ",
+                "the resume runs only once the drain exited 0"
+            )
+            .And.Contain(
+                "; /usr/bin/podman kube play --replace --userns=nomap --network orders-home "
+                    + $"{Dir}/orders-home-resume.yaml && /usr/bin/podman wait orders-home-resume-pod-resume "
+                    + ">/dev/null; }; ",
+                "a restart that fails still ends the drain"
+            );
+        lines
+            .Count(l => l.Contains("orders-home-resume.yaml", StringComparison.Ordinal))
+            .Should()
+            .Be(1, "no line runs the resume on its own");
         drain
             .Should()
             .EndWith(
                 "; /usr/bin/podman pod stop --ignore -t 10 orders-home-migrate-pod >/dev/null; "
-                    + "/usr/bin/podman pod stop --ignore -t 10 orders-home-drain-pod >/dev/null"
-            );
-        lines[resume]
-            .Should()
-            .EndWith(
-                "&& /usr/bin/podman wait orders-home-resume-pod-resume >/dev/null; "
+                    + "/usr/bin/podman pod stop --ignore -t 10 orders-home-drain-pod >/dev/null; "
                     + "/usr/bin/podman pod stop --ignore -t 10 orders-home-resume-pod >/dev/null",
                 "a pod held to egress keeps its sidecar serving until it is stopped"
             );
