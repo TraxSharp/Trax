@@ -68,7 +68,10 @@ idle for good.
 - The roll starts the new hub beside the old one while the drain still holds, so neither starts new work and the new
   hub's recovery fails nothing, even after a forced drain left runs going. The drain ends only after every service has
   rolled: a worker the roll has not replaced yet claims nothing it would be cut off in. A run a forced roll does cut
-  off is failed by the stale-run reaper. cli/0007 records the overlap.
+  off is failed by the stale-run reaper: an ordinary train's once it passes its stale threshold, and a train left out
+  of `MaxActiveJobs` (the scheduler's own, or `ExcludeFromMaxActiveJobs<T>()`), which has no timeout, once it started
+  more than 20 minutes ago (the default drain timeout plus margin) and its host has written no heartbeat since. A
+  host that still beats keeps its run however long it takes. cli/0007 records the overlap.
 - A crashed deploy leaves the hosts drained until the row lapses or someone resumes, even if a hub restarts.
 - A train a request runs inline, a machine timer and a machine policy still run while drained. The drain waits for the
   runs they start like any other.
@@ -84,6 +87,9 @@ manifest manager, a worker, a lapsed row, misfire after the drain, the starting 
 
 ## Changelog
 
+- **2026-11-25**: The stale-run reaper covers the trains left out of `MaxActiveJobs` too, by their host's heartbeat.
+  It skipped them, and they had only the startup recovery a hub skips while drained, so a forced roll could leave one
+  InProgress for good and every later drain waited on it.
 - **2026-11-25**: A deploy's drain holds for a time sized from the roll's own timeouts, from when it finished waiting,
   rather than a fixed 10 minutes past its timeout. A forced roll whose new hub never got ready waited out its rollout
   and a rollback with the drain already lapsed, so the pods put back started undrained and recovered runs still going.

@@ -63,7 +63,9 @@ Still busy after the drain's timeout of 00:10:00, so the drain was ended and not
 Then either let the work finish and deploy again, cancel it from the console, or deploy with `--force`, which rolls
 with the work still running. A forced roll keeps the drain until the resume, so the new hub's startup does not fail
 what the old hosts still run; a run its host's stop cuts off is failed by the stale-run reaper once
-`StaleInProgressTimeout` passes.
+`StaleInProgressTimeout` passes. A train left out of `MaxActiveJobs` has no timeout, so its run is failed instead once
+it started more than 20 minutes ago and its host has written no heartbeat since; a long run on a host that is still
+up is left alone.
 
 ## When a deploy dies
 

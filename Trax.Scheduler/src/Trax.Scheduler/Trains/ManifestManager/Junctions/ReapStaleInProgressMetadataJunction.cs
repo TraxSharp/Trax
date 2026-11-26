@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Functional;
+using Trax.Effect.Configuration.Deploy;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Effect.Services.EffectJunction;
@@ -32,6 +33,13 @@ namespace Trax.Scheduler.Trains.ManifestManager.Junctions;
 /// CancelTimedOutJobsJunction and only then, once cancellation has had the same time to land,
 /// failed here.
 ///
+/// A run of a train in <see cref="SchedulerConfiguration.ExcludedTrainTypeNames"/> (the scheduler's
+/// own and every <c>ExcludeFromMaxActiveJobs</c> train) has no timeout, so it is judged by its host
+/// instead: it is failed once it started more than <see cref="ExcludedOrphanedAfter"/> ago and its
+/// host (<c>HostInstanceId</c>) has written no heartbeat since then. A run on a host that still
+/// beats is never failed, however long it runs. A forced roll kills such a host, and a hub that
+/// starts while drained skips the startup recovery that used to fail the run (Trax.Docs/adr/0065).
+///
 /// Each run it fails is published to the lifecycle hooks as <c>Failed</c>, once, after the write
 /// commits (see <see cref="DeferredOutcomeEvents"/>), since no train is left to publish it.
 ///
@@ -47,9 +55,18 @@ internal sealed class ReapStaleInProgressMetadataJunction(
     TimeProvider timeProvider
 ) : EffectJunction<Unit, Unit>
 {
+    /// <summary>
+    /// How long an excluded train's run must have run, and its host gone without a heartbeat, before
+    /// it is failed: a deploy's default drain timeout plus its margin, 20 minutes. A live host beats
+    /// every 15 seconds.
+    /// </summary>
+    internal static readonly TimeSpan ExcludedOrphanedAfter =
+        TraxDrain.DefaultTimeout + TraxDrain.Margin;
+
     public override async Task<Unit> Run(Unit input)
     {
         var now = timeProvider.GetUtcNow().UtcDateTime;
+        await ReapOrphanedExcludedRunsAsync(now).ConfigureAwait(false);
         var staleMetadata = await FindStaleRunsAsync(now).ConfigureAwait(false);
 
         if (staleMetadata.Count == 0)
@@ -88,6 +105,62 @@ internal sealed class ReapStaleInProgressMetadataJunction(
         await outcomeEvents.FailedAsync(dataContext, reaped).ConfigureAwait(false);
 
         return Unit.Default;
+    }
+
+    /// <summary>
+    /// Fails the excluded trains' runs whose host has stopped beating (see the remarks), each
+    /// logged and published like the stale ones.
+    /// </summary>
+    private async Task ReapOrphanedExcludedRunsAsync(DateTime now)
+    {
+        if (config.ExcludedTrainTypeNames.Count == 0)
+            return;
+        var cutoff = now - ExcludedOrphanedAfter;
+        var orphans = dataContext.Metadatas.Where(m =>
+            m.TrainState == TrainState.InProgress
+            && m.StartTime < cutoff
+            && config.ExcludedTrainTypeNames.Contains(m.Name)
+            && !dataContext.HostHeartbeats.Any(h =>
+                h.InstanceId == m.HostInstanceId && h.LastHeartbeatAt >= cutoff
+            )
+        );
+        var found = await orphans
+            .Select(m => new
+            {
+                m.Id,
+                m.Name,
+                m.StartTime,
+                m.HostInstanceId,
+            })
+            .AsNoTracking()
+            .ToListAsync(CancellationToken)
+            .ConfigureAwait(false);
+        if (found.Count == 0)
+            return;
+        foreach (var md in found)
+            logger.LogWarning(
+                "Metadata {MetadataId} (train: {TrainName}) has been InProgress since {StartTime} on "
+                    + "host {Host}, which has not beaten since {Cutoff} — marking as failed",
+                md.Id,
+                md.Name,
+                md.StartTime,
+                md.HostInstanceId,
+                cutoff
+            );
+        var ids = found.Select(m => m.Id).ToList();
+        var reaped = await ReapedRuns
+            .FailAsync(
+                dataContext,
+                orphans.Where(m => ids.Contains(m.Id)),
+                ids,
+                "The host running this train stopped beating while it was InProgress",
+                "HostStoppedBeating",
+                nameof(ReapStaleInProgressMetadataJunction),
+                timeProvider,
+                CancellationToken
+            )
+            .ConfigureAwait(false);
+        await outcomeEvents.FailedAsync(dataContext, reaped).ConfigureAwait(false);
     }
 
     private List<long> StaleIds(List<TimedRun> staleMetadata)

@@ -63,9 +63,10 @@ in the ManifestManager (pending longer than `StalePendingTimeout`, or in progres
 `StaleInProgressTimeout`), and the scheduler's startup recovery (`RecoverStuckJobsOnStartup`, on
 by default), which on any scheduler host's start fails every `InProgress` run in the shared
 database that began before it, whichever host was running it. A train excluded with
-`ExcludeFromMaxActiveJobs<T>()` is skipped by both reapers, so a run of it whose worker died holds
-its subject until a scheduler host restarts, or indefinitely if it never left `Pending`, which the
-startup recovery does not touch. Where the ManifestManager is disabled on every host no reaper
+`ExcludeFromMaxActiveJobs<T>()` is skipped by the pending reaper, and the in-progress reaper fails
+it only once it has run 20 minutes and its host has stopped writing heartbeats, so a run of it
+whose worker died holds its subject until then, or indefinitely if it never left `Pending`, which
+the startup recovery does not touch. Where the ManifestManager is disabled on every host no reaper
 runs at all. A synchronous run through the mediator does not
 consult the key, and neither does a dormant dependent a parent train activates: its entry is built
 by the scheduler with input the parent chose at runtime, and carries no subject. Nor does the
@@ -114,6 +115,8 @@ overrides `LockSubject()`.
 
 ## Changelog
 
+- **2026-11-25**: The in-progress reaper fails an `ExcludeFromMaxActiveJobs` run whose host has stopped
+  beating, so such a run no longer holds its subject until a scheduler host restarts.
 - **2026-10-01**: The Run dialog runs through `IOperationsService.RunTrainAsync` rather than
   handing its input to the job submitter, and warns only for a train that overrides
   `QueueSubjectKey`, now that train discovery reports it.
