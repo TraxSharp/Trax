@@ -1451,12 +1451,19 @@ jobs:
           for _ in $(seq 30); do [ -S "$sock" ] && break; sleep 1; done
           [ -S "$sock" ] || { cat "$RUNNER_TEMP/podman-service.log"; exit 1; }
           echo "TRAX_SANDBOX_PODMAN_SOCKET=$sock" >>"$GITHUB_ENV"
+      - name: Restore
+        # From the committed lockfiles, as every other job restores, so a drifted one stops here.
+        run: |
+          set -euo pipefail
+          dotnet restore Trax.Scheduler/tests/Trax.Scheduler.Sandbox.Image --locked-mode
+          dotnet restore Trax.Scheduler/tests/Trax.Scheduler.Sandbox.Tests --locked-mode
       - name: Build the escape image
         # What build-escape-image.sh does, with the runner's SDK in place of trax-test's image.
         run: |
           set -euo pipefail
           work=$RUNNER_TEMP/escape
-          dotnet publish Trax.Scheduler/tests/Trax.Scheduler.Sandbox.Image -c Release -o "$work/app" -nologo
+          dotnet publish Trax.Scheduler/tests/Trax.Scheduler.Sandbox.Image -c Release -o "$work/app" -nologo \
+            --no-restore -warnaserror
           cp Trax.Scheduler/tests/Trax.Scheduler.Sandbox.Image/Containerfile "$work/Containerfile"
           podman build -q -t localhost/trax-sandbox-escape:test "$work" >/dev/null
           digest() { podman image inspect --format '{{.Digest}}' "$1"; }
@@ -1470,7 +1477,7 @@ jobs:
           TRAX_SANDBOX_ASSUME_ISOLATED: '1'
           TRAX_SANDBOX_ESCAPE_REQUIRED: '1'
         run: >
-          dotnet test Trax.Scheduler/tests/Trax.Scheduler.Sandbox.Tests -c Release
+          dotnet test Trax.Scheduler/tests/Trax.Scheduler.Sandbox.Tests -c Release --no-restore -warnaserror
           --filter "FullyQualifiedName~Trax.Scheduler.Sandbox.Tests.EscapeTests.PodmanEscapeTests"
 
   # The release tooling at the root: semantic-release's config and the plugin in .github/release
