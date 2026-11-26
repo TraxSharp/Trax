@@ -135,6 +135,12 @@ public sealed class SandboxLauncherOptions
         : string.IsNullOrEmpty(Kubernetes.RuntimeClassName)
             ? "Kubernetes:RuntimeClassName is required"
         : string.IsNullOrEmpty(Kubernetes.RunsClaimName) ? "Kubernetes:RunsClaimName is required"
+        : string.IsNullOrEmpty(Kubernetes.OutputStorageClassName)
+            ? "Kubernetes:OutputStorageClassName is required: a StorageClass that enforces capacity, the run's disk ceiling"
+        : KubernetesStorage.NamesAHostPathClass(Kubernetes.OutputStorageClassName)
+            ? $"Kubernetes:OutputStorageClassName '{Kubernetes.OutputStorageClassName}' enforces no size"
+        : !SandboxProfile.IsPinned(Kubernetes.CollectorImage)
+            ? "Kubernetes:CollectorImage must be the launcher's image, pinned as name@sha256:<digest>"
         : !Path.IsPathFullyQualified(Kubernetes.RunsPath)
         || string.Equals(Path.GetFullPath(Kubernetes.RunsPath), "/", StringComparison.Ordinal)
             ? "Kubernetes:RunsPath must be an absolute path of its own, not the root"

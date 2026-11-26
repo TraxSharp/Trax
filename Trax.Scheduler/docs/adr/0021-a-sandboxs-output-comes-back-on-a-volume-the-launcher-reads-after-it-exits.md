@@ -40,22 +40,33 @@ a holder: a launcher-owned container of a pinned pause image that keeps both vol
 never runs anything of the sandbox's. The input goes in through the holder before the sandbox
 starts; the output comes out through it, as podman's tar of the directory, after the sandbox exits.
 
-**On a cluster** each run gets a directory on a volume the launcher's pod mounts; the sandbox mounts
-that run's `in` read-only and its `out` writable, by subPath, and is pinned to the launcher's node.
-The launcher reads the directory after the Job's pod is gone, walking it without following a link
-and letting the tar writer read each entry's type with lstat, so a link or a named pipe is recorded
-as one and never opened. The output directory has no size of its own there, so the launcher walks
-it while the sandbox runs and kills a run that goes over. A walk misses a file the sandbox deleted
-while still holding it open, so the launcher also reads the volume's free space from the filesystem,
-whose count includes such a file: below `RunsMinFreePercent` no run starts and every running one is
-killed. That floor is shared by every run on the volume, not a limit per run. The claim's size is a
-ceiling only where its storage class enforces capacity, and k3s's default `local-path` does not, so
-on k3s the volume is the node's disk and the floor is what keeps it from filling.
+**On a cluster** each run's `/sandbox/out` is a volume of its own: a generic ephemeral volume of
+its declared disk on `OutputStorageClassName`, made with the sandbox's pod and deleted with it, so
+the size is a per-run limit the storage enforces, as the tmpfs is on one host. That needs a class
+that enforces capacity (TopoLVM, Longhorn, a cloud block-storage driver), which k3s does not ship.
+The launcher refuses to start without one: `Validate()` refuses no class and `local-path`, and at
+startup it reads the class (a ClusterRole lets it `get` that one class) and refuses a host-path
+provisioner. Whether any other class enforces capacity nothing in the API says, so the deploy's
+choice of class is the claim, and the docs name the classes that qualify.
 
-A per-run limit the kernel enforces, as the tmpfs is on one host, is not done on a cluster yet. A
-memory-backed emptyDir with a size would be one, but it is gone with the pod, before the launcher
-can read it, and getting it out needs something trusted in the pod that outlives the sandbox. A
-per-run volume needs a storage class that enforces capacity, which k3s does not ship.
+The volume lasts only as long as the pod, so it is read after the sandbox exits and before its pod
+is deleted. The sandbox's pod is then in a terminal phase with `restartPolicy: Never` and no
+retries, so nothing writes the volume again. The launcher cannot mount a volume into its own
+running pod, so a collector does the reading: a Job of the launcher's own image, under the same
+RuntimeClass and hardening, as the profile's user, with the run's output claim read-only and only
+that run's `collected` directory on the shared runs claim writable. It walks the output without
+following a link, lets the tar writer read each entry's type with lstat (a link or a named pipe is
+recorded as one and never opened), applies the caps, and writes a tar of what it accepted or the
+reason it refused. The launcher reads that tar again with the same checks. So the untrusted files
+are opened only in the collector's pod, and no untrusted code runs in it or the launcher's.
+
+The shared runs claim now holds only each run's input and collected tar, both bounded by the caps.
+It keeps the free-space floor: below `RunsMinFreePercent` free no run starts and every running one
+is killed.
+
+Rejected for the per-run limit: a memory-backed emptyDir with a size, read back by a collector in
+the same pod, which would share the Kata VM with the untrusted code; and keeping the shared floor
+alone, which one hostile run can drive down to fail every other run.
 
 ## Exemplars
 
@@ -72,17 +83,23 @@ per-run volume needs a storage class that enforces capacity, which k3s does not 
 - `KubernetesSandboxBackendTests` pins the cluster path against an API that refuses every
   subresource, as the launcher's Role does.
 
-- `KubernetesSandboxBackendTests` also pins the watch loop: the disk kill, the entry kill, the
-  start timeout, the free-space floor before a start and while a run goes on, and the cleanup after
-  a caller gives up.
+- `KubernetesSandboxBackendTests` also pins the watch loop (the start timeout, the free-space floor
+  before a start and while a run goes on, the cleanup after a caller gives up), that the collector
+  reads the exited sandbox's own claim read-only before that pod is deleted, that a killed run is
+  never collected, and that the start is refused without a class that can enforce capacity.
+- `KubernetesJobSpecTests` pins the output volume's shape and the collector's, and
+  `KubernetesSandboxManifestsTests` the admission rules that allow exactly that shape.
+- `DirectoryOutputTests` also pins the collector's tar and refusal and the launcher's read of them.
 
-On k3s with Kata the subPath mounts, the size polling (a run filling its output was killed) and the
-entry polling (a run leaving too many files was killed and refused) worked. Not covered: neither
-check is a hard cap per run. Between two polls a sandbox can write as fast as the node's disk takes
-it, and a deleted file it holds open is seen only by the shared free-space floor.
+On k3s with Kata the subPath input mount worked. Not covered: the per-run output volume and the
+collector have not been run on a cluster; `KubernetesEscapeTests.cs` needs a cluster with a class that
+enforces capacity and runs by hand. The cap is only as hard as the class makes it.
 
 ## Changelog
 
+- **2026-11-25**: A cluster run's output is a generic ephemeral volume of its declared disk on a
+  class that enforces capacity, read by a collector Job before the sandbox's pod is deleted; the
+  launcher refuses to start without such a class. The output size and entry polling are gone.
 - **2026-11-25**: The claim's size is not a ceiling on `local-path`; a free-space floor on the runs
   volume stands in until a cluster has a per-run limit.
 - **2026-11-24**: Too many files is its own refusal on a cluster, not a disk overrun.

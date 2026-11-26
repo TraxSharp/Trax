@@ -6,6 +6,12 @@ internal interface ISandboxBackend
     /// <summary>Runs <paramref name="job"/> to its end. Never throws for anything the sandbox did; a runtime or API failure is a <see cref="SandboxEnd.Failed"/> execution.</summary>
     Task<SandboxExecution> RunAsync(SandboxJob job, CancellationToken ct);
 
+    /// <summary>
+    /// Checks, before anything else at startup, what the backend can check of its environment
+    /// beyond the canary; throws <see cref="Core.SandboxRuntimeRefusedException"/> to refuse the start.
+    /// </summary>
+    Task PreflightAsync(CancellationToken ct) => Task.CompletedTask;
+
     /// <summary>Removes whatever an earlier launcher process left behind (a crash mid-run), before any new run starts.</summary>
     Task SweepAsync(CancellationToken ct);
 

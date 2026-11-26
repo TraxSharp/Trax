@@ -1,4 +1,3 @@
-using System.Globalization;
 using k8s;
 using Microsoft.Extensions.Logging.Abstractions;
 using Trax.Scheduler.Sandbox.Launcher.Backends;
@@ -11,8 +10,8 @@ namespace Trax.Scheduler.Sandbox.Tests.UnitTests;
 /// <summary>
 /// The cluster backend's calls, against an API that answers as the launcher's Role allows: the
 /// run uses no subresource (a first version read <c>jobs/status</c> and was refused on k3s), the
-/// output is read from the run's directory after the pod is gone, and the directory and Job are
-/// removed whatever happened.
+/// output is collected from the run's own volume by a collector Job after the sandbox exits and
+/// read from the run's directory, and the directory and both Jobs are removed whatever happened.
 ///
 /// <para>Enforces <c>docs/adr/0021-a-sandboxs-output-comes-back-on-a-volume-the-launcher-reads-after-it-exits.md</c>.</para>
 /// </summary>
@@ -125,7 +124,26 @@ public class KubernetesSandboxBackendTests
         return await backend.RunAsync(job, ct).ConfigureAwait(false);
     }
 
-    private string OutputOf(string path) => Path.Combine(_runs, RunId, SandboxPaths.Output, path);
+    private string InRun(string path) => Path.Combine(_runs, RunId, path);
+
+    private async Task PreflightAsync(FakeKubernetes api)
+    {
+        var options = LauncherOptions.Kubernetes();
+        options.Kubernetes.RunsPath = _runs;
+        using var client = new Kubernetes(
+            new KubernetesClientConfiguration { Host = "http://cluster" },
+            api
+        );
+        await new KubernetesSandboxBackend(
+            client,
+            options,
+            _clock,
+            NullLogger<KubernetesSandboxBackend>.Instance,
+            _ => (_available, 100)
+        )
+            .PreflightAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+    }
 
     private static async Task WriteAsync(string file, long bytes)
     {
@@ -146,7 +164,7 @@ public class KubernetesSandboxBackendTests
     }
 
     [Test]
-    public async Task RunAsync_CompletedJob_IsReadFromItsDirectoryWithNoSubresource()
+    public async Task RunAsync_CompletedJob_IsCollectedFromItsOwnVolumeWithNoSubresource()
     {
         var api = new FakeKubernetes(_runs);
         api.Output["result.json"] = "{}";
@@ -168,6 +186,31 @@ public class KubernetesSandboxBackendTests
         api.CreatedJob?["spec"]?["template"]?["spec"]?["runtimeClassName"]?.GetValue<string>()
             .Should()
             .Be("kata");
+        var collector = api.CreatedCollector?["spec"]?["template"]?["spec"];
+        collector
+            ?["containers"]?[0]?["image"]?.GetValue<string>()
+            .Should()
+            .Be(LauncherOptions.Launcher);
+        var claim = collector
+            ?["volumes"]?.AsArray()
+            .Select(v => v?["persistentVolumeClaim"])
+            .Single(c => c?["readOnly"] is not null);
+        claim
+            ?["claimName"]?.GetValue<string>()
+            .Should()
+            .Be(FakeKubernetes.PodOf($"trax-sbx-{RunId}") + "-out", Adr);
+        claim
+            ?["readOnly"]?.GetValue<bool>()
+            .Should()
+            .BeTrue("the collector reads the exited sandbox's own output claim, read-only");
+        var calls = api.Calls.ToList();
+        calls
+            .FindIndex(c => c.StartsWith("DELETE ", StringComparison.Ordinal))
+            .Should()
+            .BeGreaterThan(
+                calls.FindIndex(c => c.Contains("-collect", StringComparison.Ordinal)),
+                "the sandbox's pod, and with it its output volume, stays until the output is collected"
+            );
         Directory
             .Exists(Path.Combine(_runs, RunId))
             .Should()
@@ -208,76 +251,33 @@ public class KubernetesSandboxBackendTests
         };
 
         (await RunAsync(api)).End.Should().Be(SandboxEnd.OutOfMemory);
+        api.CreatedCollector.Should().BeNull("a killed run hands nothing back");
+    }
+
+    [Test]
+    public async Task RunAsync_ACollectorThatFails_FailsTheRun()
+    {
+        var api = new FakeKubernetes(_runs)
+        {
+            CollectorCondition = ("Failed", "BackoffLimitExceeded"),
+        };
+
+        var execution = await RunAsync(api);
+
+        execution.End.Should().Be(SandboxEnd.Failed);
+        execution.Detail.Should().Contain("collector");
+        KilledAndRemoved(api);
     }
 
     [Test]
     public async Task RunAsync_ALinkInTheOutput_IsRefused()
     {
-        var api = new FakeKubernetes(_runs);
-        api.Output["result.json"] = "{}";
-        var output = Path.Combine(_runs, RunId, "out");
-        Directory.CreateDirectory(output);
-        File.CreateSymbolicLink(Path.Combine(output, "files"), "/etc");
+        var api = new FakeKubernetes(_runs) { CollectorRefuses = "'files' is a symbolic link" };
 
         var execution = await RunAsync(api);
 
         execution.OutputRefused.Should().Contain("symbolic link");
-    }
-
-    [Test]
-    public async Task RunAsync_OutputPastItsDiskWhileRunning_IsKilled()
-    {
-        var api = new FakeKubernetes(_runs) { RunningPolls = 1000 };
-        api.OnPoll = async poll =>
-        {
-            if (poll == 1)
-                await WriteAsync(OutputOf("files/big"), (DiskMiB + 1) * 1024L * 1024)
-                    .ConfigureAwait(false);
-        };
-
-        var execution = await RunAsync(api);
-
-        execution.End.Should().Be(SandboxEnd.DiskExceeded, Adr);
-        execution.Output.Should().BeEmpty("a killed run hands nothing back");
-        KilledAndRemoved(api);
-    }
-
-    [Test]
-    public async Task RunAsync_OutputWithinItsDisk_RunsToTheEnd()
-    {
-        var api = new FakeKubernetes(_runs) { RunningPolls = 3 };
-        api.OnPoll = async poll =>
-        {
-            if (poll == 1)
-                await WriteAsync(OutputOf("files/big"), (DiskMiB - 1) * 1024L * 1024)
-                    .ConfigureAwait(false);
-        };
-
-        var execution = await RunAsync(api);
-
-        execution.End.Should().Be(SandboxEnd.Exited, "the disk is counted in MiB");
-        execution.Output.Select(f => f.Path).Should().Equal("files/big");
-    }
-
-    [Test]
-    public async Task RunAsync_TooManyEntriesWhileRunning_IsKilled()
-    {
-        var api = new FakeKubernetes(_runs) { RunningPolls = 1000 };
-        api.OnPoll = async poll =>
-        {
-            if (poll == 1)
-                for (var i = 0; i < 20; i++)
-                    await WriteAsync(
-                            OutputOf("files/" + i.ToString(CultureInfo.InvariantCulture)),
-                            0
-                        )
-                        .ConfigureAwait(false);
-        };
-
-        var execution = await RunAsync(api, o => o.Caps.MaxArchiveFiles = 10);
-
-        execution.End.Should().Be(SandboxEnd.TooManyEntries, Adr);
-        KilledAndRemoved(api);
+        execution.Output.Should().BeEmpty();
     }
 
     [Test]
@@ -369,8 +369,8 @@ public class KubernetesSandboxBackendTests
         {
             if (poll == 1 && !OperatingSystem.IsWindows())
             {
-                await WriteAsync(OutputOf("files/x/f"), 1).ConfigureAwait(false);
-                ReadOnly(OutputOf("files/x"));
+                await WriteAsync(InRun("collected/files/x/f"), 1).ConfigureAwait(false);
+                ReadOnly(InRun("collected/files/x"));
             }
         };
 
@@ -382,8 +382,8 @@ public class KubernetesSandboxBackendTests
     [Test]
     public async Task RunAsync_APodThatNeverGoes_KeepsTheRunDirectory()
     {
-        // Until the pod is gone the sandbox can still change the directory under the walk that
-        // unlocks and removes it, so the directory stays for the next start's sweep.
+        // Until the pods are gone the directory can still change under the walk that unlocks and
+        // removes it, so it stays for the next start's sweep.
         var api = new FakeKubernetes(_runs) { PodsNeverGo = true };
         api.Output["result.json"] = "{}";
         api.OnPodsList = deleted =>
@@ -392,10 +392,9 @@ public class KubernetesSandboxBackendTests
                 _clock.Shift += TimeSpan.FromMinutes(1);
         };
 
-        var execution = await RunAsync(api);
+        await RunAsync(api);
 
-        execution.End.Should().Be(SandboxEnd.Failed);
-        execution.Detail.Should().Contain("still there");
+        api.Calls.Should().Contain(c => c.StartsWith("DELETE ", StringComparison.Ordinal));
         Directory
             .Exists(Path.Combine(_runs, RunId))
             .Should()
@@ -414,9 +413,9 @@ public class KubernetesSandboxBackendTests
             ReadOnly(target);
             var api = new FakeKubernetes(_runs);
             api.Output["result.json"] = "{}";
-            var output = Path.Combine(_runs, RunId, "out", "files");
-            Directory.CreateDirectory(output);
-            File.CreateSymbolicLink(Path.Combine(output, "x"), target);
+            var collected = Path.Combine(_runs, RunId, "collected");
+            Directory.CreateDirectory(collected);
+            File.CreateSymbolicLink(Path.Combine(collected, "x"), target);
 
             await RunAsync(api);
 
@@ -439,9 +438,9 @@ public class KubernetesSandboxBackendTests
     public async Task SweepAsync_ARunDirectoryTheSandboxMadeReadOnly_IsRemovedAndTheStartGoesOn()
     {
         AsANormalUser();
-        await WriteAsync(OutputOf("x/f"), 1);
+        await WriteAsync(InRun("collected/x/f"), 1);
         if (!OperatingSystem.IsWindows())
-            ReadOnly(OutputOf("x"));
+            ReadOnly(InRun("collected/x"));
         var other = Path.Combine(_runs, "lost+found");
         Directory.CreateDirectory(other);
 
@@ -449,5 +448,32 @@ public class KubernetesSandboxBackendTests
 
         Directory.Exists(Path.Combine(_runs, RunId)).Should().BeFalse();
         Directory.Exists(other).Should().BeTrue("only a run's directory is the launcher's");
+    }
+
+    [Test]
+    public async Task PreflightAsync_AClassThatEnforcesCapacity_Passes()
+    {
+        var api = new FakeKubernetes(_runs);
+
+        await PreflightAsync(api);
+
+        api.Calls.Should()
+            .Contain($"GET /apis/storage.k8s.io/v1/storageclasses/{LauncherOptions.StorageClass}");
+    }
+
+    [TestCase("rancher.io/local-path", "enforces no size")]
+    [TestCase(null, "could not be read")]
+    public async Task PreflightAsync_NoClassThatEnforcesCapacity_RefusesTheStart(
+        string? provisioner,
+        string reason
+    )
+    {
+        var api = new FakeKubernetes(_runs) { StorageProvisioner = provisioner };
+
+        await FluentActions
+            .Awaiting(() => PreflightAsync(api))
+            .Should()
+            .ThrowAsync<Trax.Scheduler.Sandbox.Launcher.Core.SandboxRuntimeRefusedException>()
+            .WithMessage($"*{reason}*");
     }
 }

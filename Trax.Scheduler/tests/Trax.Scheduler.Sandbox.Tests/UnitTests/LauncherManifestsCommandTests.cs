@@ -40,7 +40,9 @@ public class LauncherManifestsCommandTests
                 "--launcher-image",
                 LauncherImage,
                 "--hub-namespace",
-                "trax-hub"
+                "trax-hub",
+                "--output-storage-class",
+                LauncherOptions.StorageClass
             ),
             path,
             CancellationToken.None
@@ -51,7 +53,35 @@ public class LauncherManifestsCommandTests
             .Contain("kind: ValidatingAdmissionPolicy")
             .And.Contain(LauncherImage)
             .And.Contain(LauncherOptions.Image)
-            .And.Contain("trax-hub");
+            .And.Contain("trax-hub")
+            .And.Contain($"storageClassName == '{LauncherOptions.StorageClass}'");
+    }
+
+    [TestCase(null)]
+    [TestCase("local-path")]
+    public async Task RenderManifestsAsync_NoClassThatEnforcesCapacity_Throws(string? storageClass)
+    {
+        var args = new List<string>
+        {
+            "--launcher-image",
+            LauncherImage,
+            "--hub-namespace",
+            "trax-hub",
+        };
+        if (storageClass is not null)
+            args.AddRange(["--output-storage-class", storageClass]);
+
+        await FluentActions
+            .Awaiting(() =>
+                TraxSandboxLauncher.RenderManifestsAsync(
+                    Configuration(LauncherOptions.Image, [.. args]),
+                    Path.Combine(_dir, "x.yaml"),
+                    CancellationToken.None
+                )
+            )
+            .Should()
+            .ThrowAsync<ArgumentException>()
+            .WithMessage("*OutputStorageClassName*");
     }
 
     [Test]

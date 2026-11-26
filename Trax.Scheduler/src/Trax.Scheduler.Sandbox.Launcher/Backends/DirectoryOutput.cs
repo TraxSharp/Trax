@@ -5,8 +5,8 @@ using Trax.Scheduler.Services.Sandbox;
 namespace Trax.Scheduler.Sandbox.Launcher.Backends;
 
 /// <summary>
-/// Reads a run's output directory on a cluster, where the launcher sees it on the shared volume
-/// after the sandbox's pod is gone. It walks the tree without following a link, has the tar
+/// Reads a run's output directory on a cluster, in the collector's pod, where the run's output
+/// volume is mounted read-only after the sandbox has exited. It walks the tree without following a link, has the tar
 /// writer read each entry's type with lstat (so a link, a device or a named pipe is recorded as
 /// one and never opened), and passes the tar through the same checks as podman's.
 /// </summary>
@@ -58,24 +58,6 @@ internal static class DirectoryOutput
 
         buffer.Position = 0;
         return await SandboxArchive.ReadAsync(buffer, limits, "", ct).ConfigureAwait(false);
-    }
-
-    /// <summary>
-    /// The bytes in <paramref name="directory"/>, and whether it holds more than
-    /// <paramref name="maxEntries"/> entries, where counting stops; never follows a link.
-    /// </summary>
-    public static (long Bytes, bool TooMany) Size(string directory, int maxEntries)
-    {
-        long bytes = 0;
-        var entries = 0;
-        foreach (var entry in Walk(new DirectoryInfo(directory)))
-        {
-            if (++entries > maxEntries)
-                return (bytes, true);
-            if (entry is FileInfo { LinkTarget: null } file)
-                bytes += file.Length;
-        }
-        return (bytes, false);
     }
 
     /// <summary>Every entry under <paramref name="root"/>; descends only into real directories, never a link to one.</summary>

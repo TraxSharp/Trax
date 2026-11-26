@@ -127,6 +127,26 @@ public class SandboxLauncherOptionsTests
     public void Validate_KubernetesWithoutNode_IsRefused() =>
         Refused(o => o.Kubernetes.NodeName = "", "NODE_NAME", LauncherOptions.Kubernetes());
 
+    [TestCase("", "OutputStorageClassName is required")]
+    [TestCase("local-path", "enforces no size")]
+    public void Validate_KubernetesWithoutAClassThatEnforcesCapacity_IsRefused(
+        string storageClass,
+        string reason
+    ) =>
+        Refused(
+            o => o.Kubernetes.OutputStorageClassName = storageClass,
+            reason,
+            LauncherOptions.Kubernetes()
+        );
+
+    [Test]
+    public void Validate_KubernetesWithAnUnpinnedCollector_IsRefused() =>
+        Refused(
+            o => o.Kubernetes.CollectorImage = "launcher:latest",
+            "CollectorImage",
+            LauncherOptions.Kubernetes()
+        );
+
     [Test]
     public void Validate_ZeroConcurrency_IsRefused() =>
         Refused(o => o.Caps.MaxConcurrent = 0, "MaxConcurrent");

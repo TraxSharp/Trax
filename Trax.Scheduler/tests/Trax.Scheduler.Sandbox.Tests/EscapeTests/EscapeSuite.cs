@@ -227,6 +227,21 @@ public abstract class EscapeSuite
     }
 
     [Test]
+    public async Task FillDiskThroughAnUnlinkedFile_StopsAtItsOwnVolumeSize()
+    {
+        // A file deleted while still open is in no walk of the output; only a size the storage
+        // enforces stops it, and then at this run's size, not the shared volume's.
+        var run = await RunAsync(new HostileInput("fill-disk-unlinked", []));
+
+        long.Parse(run.Output?.Echo ?? "", System.Globalization.CultureInfo.InvariantCulture)
+            .Should()
+            .BeLessThanOrEqualTo(8L * 1024 * 1024, "the run's own 8 MiB volume filled");
+        (await RunAsync(new HostileInput("echo", ["still here"])))
+            .Output?.Echo.Should()
+            .Be("still here", "other runs are unaffected");
+    }
+
+    [Test]
     public async Task Symlink_IsRefused()
     {
         var thrown = (

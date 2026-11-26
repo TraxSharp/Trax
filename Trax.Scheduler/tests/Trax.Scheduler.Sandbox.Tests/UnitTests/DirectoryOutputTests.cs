@@ -130,23 +130,71 @@ public class DirectoryOutputTests
     }
 
     [Test]
-    public async Task Size_CountsFilesAndNotWhatALinkPointsAt()
+    public async Task Collector_WritesTheAcceptedFilesAsATarTheLauncherReadsBack()
     {
-        await File.WriteAllBytesAsync(Path.Combine(_dir, "a"), new byte[100]);
-        File.CreateSymbolicLink(Path.Combine(_dir, "l"), "/etc/passwd");
+        var output = Directory.CreateDirectory(Path.Combine(_dir, "out")).FullName;
+        var collected = Directory.CreateDirectory(Path.Combine(_dir, "collected")).FullName;
+        Directory.CreateDirectory(Path.Combine(output, "files"));
+        await File.WriteAllTextAsync(Path.Combine(output, "result.json"), "{}");
+        await File.WriteAllTextAsync(Path.Combine(output, "files", "a.txt"), "a");
 
-        DirectoryOutput.Size(_dir, 10).Should().Be((100L, false));
+        await SandboxOutputCollector.CollectAsync(
+            output,
+            collected,
+            Limits,
+            CancellationToken.None
+        );
+        var (files, refused) = await SandboxOutputCollector.ReadAsync(
+            collected,
+            Limits,
+            CancellationToken.None
+        );
+
+        refused.Should().BeNull();
+        files.Select(f => f.Path).Should().BeEquivalentTo("result.json", "files/a.txt");
+        files
+            .Single(f => string.Equals(f.Path, "files/a.txt", StringComparison.Ordinal))
+            .Content.ToArray()
+            .Should()
+            .Equal("a"u8.ToArray());
     }
 
     [Test]
-    public async Task Size_PastTheEntryCap_SaysTooMany()
+    public async Task Collector_ALinkInTheOutput_IsWrittenAsTheRefusal()
     {
-        for (var i = 0; i < 5; i++)
-            await File.WriteAllTextAsync(
-                Path.Combine(_dir, i.ToString(System.Globalization.CultureInfo.InvariantCulture)),
-                "x"
-            );
+        var output = Directory.CreateDirectory(Path.Combine(_dir, "out")).FullName;
+        var collected = Directory.CreateDirectory(Path.Combine(_dir, "collected")).FullName;
+        File.CreateSymbolicLink(Path.Combine(output, "files"), "/etc");
 
-        DirectoryOutput.Size(_dir, 3).TooMany.Should().BeTrue();
+        await SandboxOutputCollector.CollectAsync(
+            output,
+            collected,
+            Limits,
+            CancellationToken.None
+        );
+        var (files, refused) = await SandboxOutputCollector.ReadAsync(
+            collected,
+            Limits,
+            CancellationToken.None
+        );
+
+        File.Exists(Path.Combine(collected, SandboxOutputCollector.OutputFile))
+            .Should()
+            .BeFalse(Adr);
+        refused.Should().Contain("symbolic link");
+        files.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task Collector_LeftNothing_IsARefusal()
+    {
+        var (files, refused) = await SandboxOutputCollector.ReadAsync(
+            _dir,
+            Limits,
+            CancellationToken.None
+        );
+
+        refused.Should().Be("the collector left no output");
+        files.Should().BeEmpty();
     }
 }

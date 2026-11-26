@@ -12,7 +12,8 @@ namespace Trax.Scheduler.Sandbox.Launcher;
 /// own options so the two cannot disagree: the dedicated namespace at Pod Security
 /// <c>restricted</c>, the launcher's ServiceAccount and Role (Jobs, and pods read-only; no
 /// <c>pods/exec</c> or <c>pods/log</c>), a ServiceAccount for sandboxes with no token and no
-/// binding, a deny-all NetworkPolicy for sandboxes, the runs volume, the launcher itself, and a
+/// binding, a deny-all NetworkPolicy for sandboxes, the runs volume, a ClusterRole that lets the
+/// launcher read its output storage class and nothing else, the launcher itself, and a
 /// ValidatingAdmissionPolicy that refuses any Job or pod in the namespace that does not look like
 /// one the launcher makes.
 /// </summary>
@@ -54,6 +55,15 @@ public static class KubernetesSandboxManifests
                 "The options are not for the Kubernetes backend.",
                 nameof(options)
             );
+        if (
+            string.IsNullOrEmpty(options.Kubernetes.OutputStorageClassName)
+            || KubernetesStorage.NamesAHostPathClass(options.Kubernetes.OutputStorageClassName)
+        )
+            throw new ArgumentException(
+                "Kubernetes:OutputStorageClassName must name a StorageClass that enforces capacity; "
+                    + "each run's output volume is made on it, as the run's disk ceiling.",
+                nameof(options)
+            );
 
         var yaml = new StringBuilder();
         foreach (var o in Objects(options, launcherImage, hubNamespace, runsStorage))
@@ -89,6 +99,8 @@ public static class KubernetesSandboxManifests
         };
         yield return Role(ns);
         yield return RoleBinding(ns);
+        yield return StorageClassRole(options);
+        yield return StorageClassRoleBinding(ns);
         yield return SandboxNetworkPolicy(ns);
         yield return LauncherNetworkPolicy(ns, hubNamespace);
         yield return RunsClaim(options, runsStorage);
@@ -107,6 +119,51 @@ public static class KubernetesSandboxManifests
                 ApiGroup = "rbac.authorization.k8s.io",
                 Kind = "Role",
                 Name = LauncherName,
+            },
+            Subjects =
+            [
+                new Rbacv1Subject
+                {
+                    Kind = "ServiceAccount",
+                    Name = LauncherName,
+                    NamespaceProperty = ns,
+                },
+            ],
+        };
+
+    /// <summary>The cluster-wide name of the launcher's storage-class reader, one per namespace.</summary>
+    internal static string StorageClassReader(string ns) => $"{LauncherName}-{ns}-storage";
+
+    /// <summary>Get on the one StorageClass the launcher makes output volumes on, so it can refuse a class that enforces no size.</summary>
+    private static V1ClusterRole StorageClassRole(SandboxLauncherOptions options) =>
+        new()
+        {
+            ApiVersion = "rbac.authorization.k8s.io/v1",
+            Kind = "ClusterRole",
+            Metadata = Meta(StorageClassReader(options.Kubernetes.Namespace), ns: null),
+            Rules =
+            [
+                new V1PolicyRule
+                {
+                    ApiGroups = ["storage.k8s.io"],
+                    Resources = ["storageclasses"],
+                    ResourceNames = [options.Kubernetes.OutputStorageClassName],
+                    Verbs = ["get"],
+                },
+            ],
+        };
+
+    private static V1ClusterRoleBinding StorageClassRoleBinding(string ns) =>
+        new()
+        {
+            ApiVersion = "rbac.authorization.k8s.io/v1",
+            Kind = "ClusterRoleBinding",
+            Metadata = Meta(StorageClassReader(ns), ns: null),
+            RoleRef = new V1RoleRef
+            {
+                ApiGroup = "rbac.authorization.k8s.io",
+                Kind = "ClusterRole",
+                Name = StorageClassReader(ns),
             },
             Subjects =
             [
@@ -259,7 +316,7 @@ public static class KubernetesSandboxManifests
         };
 
     /// <summary>The launcher's configuration as environment variables, the key from its Secret.</summary>
-    private static List<V1EnvVar> LauncherEnv(SandboxLauncherOptions options)
+    private static List<V1EnvVar> LauncherEnv(SandboxLauncherOptions options, string image)
     {
         var kube = options.Kubernetes;
         var env = new List<V1EnvVar>
@@ -273,6 +330,10 @@ public static class KubernetesSandboxManifests
             Value("Trax__SandboxLauncher__Kubernetes__RuntimeClassName", kube.RuntimeClassName),
             Value("Trax__SandboxLauncher__Kubernetes__RunsClaimName", kube.RunsClaimName),
             Value("Trax__SandboxLauncher__Kubernetes__RunsPath", kube.RunsPath),
+            Value(
+                "Trax__SandboxLauncher__Kubernetes__OutputStorageClassName",
+                kube.OutputStorageClassName
+            ),
             new V1EnvVar
             {
                 Name = "Trax__SandboxLauncher__SigningKey",
@@ -286,6 +347,7 @@ public static class KubernetesSandboxManifests
                 },
             },
         };
+        env.Add(Value("Trax__SandboxLauncher__Kubernetes__CollectorImage", image));
         env.AddRange(CapsEnv(options.Caps));
         env.Add(
             Value(
@@ -397,7 +459,8 @@ public static class KubernetesSandboxManifests
                 {
                     Name = "launcher",
                     Image = image,
-                    Env = LauncherEnv(options),
+                    Env = LauncherEnv(options, image),
+                    Resources = LauncherResources(options.Caps),
                     Ports = [new V1ContainerPort { Name = "http", ContainerPort = Port }],
                     ReadinessProbe = new V1Probe
                     {
@@ -434,6 +497,38 @@ public static class KubernetesSandboxManifests
                 new V1Volume { Name = "tmp", EmptyDir = new V1EmptyDirVolumeSource() },
             ],
         };
+
+    private static V1ResourceRequirements LauncherResources(SandboxCaps caps) =>
+        new()
+        {
+            Requests = new Dictionary<string, ResourceQuantity>(StringComparer.Ordinal)
+            {
+                ["cpu"] = new("100m"),
+                ["memory"] = new("256Mi"),
+            },
+            Limits = new Dictionary<string, ResourceQuantity>(StringComparer.Ordinal)
+            {
+                ["memory"] = new(
+                    string.Create(CultureInfo.InvariantCulture, $"{LauncherMemoryMiB(caps)}Mi")
+                ),
+            },
+        };
+
+    /// <summary>
+    /// The launcher's memory limit, from its caps: a base for the runtime and the API client; every
+    /// unverified request body it may hold at once (as many as the runs it takes, and two more);
+    /// and per run, the request three times over (the body, the parsed request, the input it
+    /// writes) and the output eight times over (read, checked, tarred, base64 and JSON in the
+    /// answer, with a copy at each step). 3.2 GiB with the default caps; lower the caps to lower it.
+    /// </summary>
+    internal static long LauncherMemoryMiB(SandboxCaps caps)
+    {
+        const long MiB = 1024 * 1024;
+        var body = (long)caps.MaxInputBytes * 6 + 64 * 1024;
+        var output = (long)caps.MaxArchiveBytes + caps.MaxResultBytes;
+        var bytes = (caps.MaxConcurrent + 2) * body + caps.MaxConcurrent * (3 * body + 8 * output);
+        return 256 + (bytes + MiB - 1) / MiB;
+    }
 
     internal static Dictionary<string, string> Selector() =>
         new(StringComparer.Ordinal) { ["app.kubernetes.io/name"] = LauncherName };

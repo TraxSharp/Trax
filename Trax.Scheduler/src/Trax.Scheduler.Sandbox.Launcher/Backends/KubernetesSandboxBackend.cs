@@ -4,6 +4,7 @@ using k8s.Autorest;
 using k8s.Models;
 using Microsoft.Extensions.Logging;
 using Trax.Scheduler.Sandbox.Launcher.Configuration;
+using Trax.Scheduler.Sandbox.Launcher.Core;
 using Trax.Scheduler.Services.Sandbox;
 
 namespace Trax.Scheduler.Sandbox.Launcher.Backends;
@@ -14,15 +15,15 @@ namespace Trax.Scheduler.Sandbox.Launcher.Backends;
 /// <c>pods/log</c>.
 /// </summary>
 /// <remarks>
-/// Input and output go through a volume the launcher's own pod mounts: each run gets a directory
-/// on it, whose input directory the sandbox mounts read-only and whose output directory it mounts writable,
-/// each by subPath, so it sees nothing of other runs. The launcher writes the input before
-/// creating the Job, and reads the output only after the pod is gone. The output directory has no
-/// size of its own here, so the launcher walks it while the sandbox runs and kills a run that goes
-/// over. A walk misses a file deleted while still open, so the launcher also reads the volume's
-/// free space from the filesystem, refuses to start a run below
-/// <see cref="KubernetesBackendOptions.RunsMinFreePercent"/> and kills every running one that
-/// finds it there. Neither is a per-run kernel limit. See scheduler/0021.
+/// The input goes through a volume the launcher's own pod mounts: each run gets a directory on it,
+/// whose input directory the sandbox mounts read-only, by subPath, so it sees nothing of other
+/// runs. The output goes to a volume of the run's own, a generic ephemeral volume of its declared
+/// disk on a storage class that enforces capacity, made with the sandbox's pod and deleted with it.
+/// Once the sandbox has exited, and before its pod is deleted, a collector Job of the launcher's
+/// image mounts that volume read-only, checks it entry by entry, and writes a tar to the run's
+/// directory, which the launcher reads with the same checks. The runs volume keeps a free-space
+/// floor, <see cref="KubernetesBackendOptions.RunsMinFreePercent"/>: below it no run starts and
+/// every running one is killed. See scheduler/0021.
 /// </remarks>
 internal sealed class KubernetesSandboxBackend(
     IKubernetes client,
@@ -65,10 +66,51 @@ internal sealed class KubernetesSandboxBackend(
 
     public bool LoopbackOnly => false;
 
+    /// <summary>
+    /// Refuses the start unless <see cref="KubernetesBackendOptions.OutputStorageClassName"/>
+    /// exists and is not a host-path provisioner, which enforces no size. Whether any other class
+    /// enforces capacity is the deploy's word: nothing the launcher can read says so.
+    /// </summary>
+    public async Task PreflightAsync(CancellationToken ct)
+    {
+        var name = Kube.OutputStorageClassName;
+        V1StorageClass storage;
+        try
+        {
+            storage = await client
+                .StorageV1.ReadStorageClassAsync(name, cancellationToken: ct)
+                .ConfigureAwait(false);
+        }
+        catch (HttpOperationException ex)
+            when (ex.Response.StatusCode
+                    is System.Net.HttpStatusCode.NotFound
+                        or System.Net.HttpStatusCode.Forbidden
+            )
+        {
+            throw new SandboxRuntimeRefusedException(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"The output storage class '{name}' could not be read ({(int)ex.Response.StatusCode}): "
+                )
+                    + "it does not exist, or the launcher's ClusterRole to read it is missing. Each run's "
+                    + "output volume is made on it, as the run's disk ceiling.",
+                ex
+            );
+        }
+        if (KubernetesStorage.HostPathProvisioners.Contains(storage.Provisioner ?? ""))
+            throw new SandboxRuntimeRefusedException(
+                $"The output storage class '{name}' is provisioned by {storage.Provisioner}, which "
+                    + "makes a directory on the node and enforces no size, so a run's output volume "
+                    + "there is no disk ceiling. Name a class that enforces capacity (TopoLVM, "
+                    + "Longhorn, a cloud block-storage driver)."
+            );
+    }
+
     public async Task<SandboxExecution> RunAsync(SandboxJob job, CancellationToken ct)
     {
         var run = Path.Combine(Kube.RunsPath, job.RunId);
         var name = KubernetesJobSpec.JobName(job.RunId);
+        var collector = KubernetesJobSpec.CollectorName(job.RunId);
         try
         {
             if (LowOnSpace() is { } low)
@@ -82,11 +124,11 @@ internal sealed class KubernetesSandboxBackend(
                 )
                 .ConfigureAwait(false);
 
-            var (end, code, detail) = await WatchAsync(name, run, job.Limits, ct)
+            var (end, code, detail, pod) = await WatchAsync(name, job.Limits, ct)
                 .ConfigureAwait(false);
-            await DeleteAndWaitAsync(name, ct).ConfigureAwait(false);
-            if (end is SandboxEnd.Failed or SandboxEnd.DiskExceeded or SandboxEnd.TooManyEntries)
+            if (end != SandboxEnd.Exited)
             {
+                // A killed run hands nothing back, so its output is never collected.
                 if (detail is not null)
                     logger.LogError("Sandbox run {RunId} was killed: {Detail}.", job.RunId, detail);
                 return new SandboxExecution(
@@ -97,13 +139,12 @@ internal sealed class KubernetesSandboxBackend(
                     Detail: detail
                 );
             }
+            if (pod is null)
+                return SandboxExecution.Failure(
+                    "the sandbox's pod was gone before its output was collected"
+                );
 
-            var (files, refused) = await DirectoryOutput
-                .ReadAsync(
-                    Path.Combine(run, SandboxPaths.Output),
-                    PodmanSandboxBackend.OutputLimits(options.Caps),
-                    ct
-                )
+            var (files, refused) = await CollectAsync(job, collector, pod, run, ct)
                 .ConfigureAwait(false);
             return new SandboxExecution(end, code, files, refused);
         }
@@ -124,19 +165,73 @@ internal sealed class KubernetesSandboxBackend(
         }
         finally
         {
-            await CleanUpAsync(name, run).ConfigureAwait(false);
+            await CleanUpAsync(name, collector, run).ConfigureAwait(false);
         }
     }
 
-    /// <summary>Removes the run's Job and directory, on an uncancellable token: a run whose caller gave up must not leave either behind.</summary>
-    private async Task CleanUpAsync(string name, string run)
+    /// <summary>
+    /// Runs the collector against the exited sandbox's output volume, which lasts as long as its
+    /// pod, and reads what it wrote. The sandbox's pod has ended and never runs again
+    /// (<c>restartPolicy: Never</c>, no retries), so nothing writes the volume while it is read.
+    /// </summary>
+    private async Task<(IReadOnlyList<SandboxFile>, string?)> CollectAsync(
+        SandboxJob job,
+        string collector,
+        string pod,
+        string run,
+        CancellationToken ct
+    )
     {
-        // The directory only once the pod is gone: until then the sandbox can still change it
+        await client
+            .BatchV1.CreateNamespacedJobAsync(
+                KubernetesJobSpec.BuildCollector(
+                    job,
+                    KubernetesJobSpec.OutputClaimName(pod),
+                    Kube,
+                    options.Caps
+                ),
+                Kube.Namespace,
+                cancellationToken: ct
+            )
+            .ConfigureAwait(false);
+
+        var giveUp = time.GetUtcNow() + StartGrace;
+        while (true)
+        {
+            await Task.Delay(Kube.PollInterval, time, ct).ConfigureAwait(false);
+            var state = await client
+                .BatchV1.ReadNamespacedJobAsync(collector, Kube.Namespace, cancellationToken: ct)
+                .ConfigureAwait(false);
+            var ended = Ended(state);
+            if (string.Equals(ended, "Complete", StringComparison.Ordinal))
+                break;
+            if (ended is not null)
+                throw new IOException($"The collector of run {job.RunId} failed ({ended}).");
+            if (time.GetUtcNow() > giveUp)
+                throw new IOException($"The collector of run {job.RunId} did not finish in time.");
+        }
+
+        return await SandboxOutputCollector
+            .ReadAsync(
+                Path.Combine(run, KubernetesJobSpec.Collected),
+                PodmanSandboxBackend.OutputLimits(options.Caps),
+                ct
+            )
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>Removes the run's Jobs and directory, on an uncancellable token: a run whose caller gave up must not leave any behind.</summary>
+    private async Task CleanUpAsync(string name, string collector, string run)
+    {
+        // The directory only once both pods are gone: until then either can still change it
         // under the walk that removes it.
-        if (
-            await QuietlyAsync(() => DeleteAndWaitAsync(name, CancellationToken.None))
-                .ConfigureAwait(false)
-        )
+        var collectorGone = await QuietlyAsync(() =>
+                DeleteAndWaitAsync(collector, CancellationToken.None)
+            )
+            .ConfigureAwait(false);
+        var sandboxGone = await QuietlyAsync(() => DeleteAndWaitAsync(name, CancellationToken.None))
+            .ConfigureAwait(false);
+        if (collectorGone && sandboxGone)
             await QuietlyAsync(() =>
                 {
                     RemoveRun(run);
@@ -189,14 +284,14 @@ internal sealed class KubernetesSandboxBackend(
     private static async Task PrepareAsync(string run, SandboxJob job, CancellationToken ct)
     {
         var input = Directory.CreateDirectory(Path.Combine(run, SandboxPaths.Input));
-        var output = Directory.CreateDirectory(Path.Combine(run, SandboxPaths.Output));
+        var collected = Directory.CreateDirectory(Path.Combine(run, KubernetesJobSpec.Collected));
         foreach (var (file, content) in job.Input)
             await File.WriteAllBytesAsync(Path.Combine(input.FullName, file), content, ct)
                 .ConfigureAwait(false);
-        // The sandbox runs as its profile's user, not the launcher's; only its own run's output
-        // directory is mounted into it.
+        // The collector runs as the profile's user, not the launcher's; only its own run's
+        // collected directory is mounted into it, and nothing of the sandbox's ever is.
         if (!OperatingSystem.IsWindows())
-            File.SetUnixFileMode(output.FullName, (UnixFileMode)0b111_111_111);
+            File.SetUnixFileMode(collected.FullName, (UnixFileMode)0b111_111_111);
     }
 
     /// <summary>
@@ -222,18 +317,17 @@ internal sealed class KubernetesSandboxBackend(
     }
 
     /// <summary>
-    /// Polls the Job until it ends, killing it when its output grows past its disk limit or the
-    /// runs volume falls below its free-space floor.
+    /// Polls the Job until it ends, killing it when the runs volume falls below its free-space
+    /// floor or the Job never starts. The run's own output volume needs no watching: its size is
+    /// the storage's to enforce.
     /// </summary>
-    private async Task<(SandboxEnd End, int? Code, string? Detail)> WatchAsync(
+    private async Task<(SandboxEnd End, int? Code, string? Detail, string? Pod)> WatchAsync(
         string name,
-        string run,
         SandboxLimits limits,
         CancellationToken ct
     )
     {
         var giveUp = time.GetUtcNow() + TimeSpan.FromSeconds(limits.TimeoutSeconds) + StartGrace;
-        var output = Path.Combine(run, SandboxPaths.Output);
         while (true)
         {
             await Task.Delay(Kube.PollInterval, time, ct).ConfigureAwait(false);
@@ -243,20 +337,15 @@ internal sealed class KubernetesSandboxBackend(
                 .ConfigureAwait(false);
             if (Ended(job) is { } ended)
             {
-                var (end, code) = await EndOfAsync(name, ended, ct).ConfigureAwait(false);
-                return (end, code, null);
+                var (end, code, pod) = await EndOfAsync(name, ended, ct).ConfigureAwait(false);
+                return (end, code, null, pod);
             }
 
-            var (bytes, tooMany) = DirectoryOutput.Size(output, options.Caps.MaxArchiveFiles + 2);
-            if (tooMany)
-                return (SandboxEnd.TooManyEntries, null, null);
-            if (bytes > limits.DiskMiB * MiB)
-                return (SandboxEnd.DiskExceeded, null, null);
             if (LowOnSpace() is { } low)
-                return (SandboxEnd.Failed, null, low);
+                return (SandboxEnd.Failed, null, low, null);
 
             if (time.GetUtcNow() > giveUp)
-                return (SandboxEnd.Failed, null, "the Job did not start in time");
+                return (SandboxEnd.Failed, null, "the Job did not start in time", null);
         }
     }
 
@@ -276,14 +365,14 @@ internal sealed class KubernetesSandboxBackend(
             : "Failed";
     }
 
-    private async Task<(SandboxEnd, int?)> EndOfAsync(
+    private async Task<(SandboxEnd, int?, string?)> EndOfAsync(
         string name,
         string ended,
         CancellationToken ct
     )
     {
         if (string.Equals(ended, "DeadlineExceeded", StringComparison.Ordinal))
-            return (SandboxEnd.TimedOut, null);
+            return (SandboxEnd.TimedOut, null, null);
 
         var pods = await client
             .CoreV1.ListNamespacedPodAsync(
@@ -292,20 +381,23 @@ internal sealed class KubernetesSandboxBackend(
                 cancellationToken: ct
             )
             .ConfigureAwait(false);
-        var terminated = pods
-            .Items.Select(p => p.Status?.ContainerStatuses?.FirstOrDefault()?.State?.Terminated)
-            .FirstOrDefault(t => t is not null);
+        var (pod, terminated) = pods
+            .Items.Select(p =>
+                (p.Metadata?.Name, p.Status?.ContainerStatuses?.FirstOrDefault()?.State?.Terminated)
+            )
+            .FirstOrDefault(t => t.Terminated is not null);
         if (terminated is null)
-            return (SandboxEnd.Exited, null);
+            return (SandboxEnd.Exited, null, null);
         return (
             string.Equals(terminated.Reason, "OOMKilled", StringComparison.Ordinal)
                 ? SandboxEnd.OutOfMemory
                 : SandboxEnd.Exited,
-            terminated.ExitCode
+            terminated.ExitCode,
+            pod
         );
     }
 
-    /// <summary>Deletes the Job and its pod, and waits until the pod is gone, so nothing writes the output while it is read.</summary>
+    /// <summary>Deletes the Job and its pod, and waits until the pod is gone, so nothing writes the run's directory while it is removed.</summary>
     private async Task DeleteAndWaitAsync(string name, CancellationToken ct)
     {
         try

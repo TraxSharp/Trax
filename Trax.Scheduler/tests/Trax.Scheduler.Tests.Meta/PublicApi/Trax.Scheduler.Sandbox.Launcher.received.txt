@@ -3,8 +3,10 @@ namespace Trax.Scheduler.Sandbox.Launcher.Configuration
     public sealed class KubernetesBackendOptions
     {
         public KubernetesBackendOptions() { }
+        public string CollectorImage { get; set; }
         public string Namespace { get; set; }
         public string NodeName { get; set; }
+        public string OutputStorageClassName { get; set; }
         public System.TimeSpan PollInterval { get; set; }
         public string RunsClaimName { get; set; }
         public int RunsMinFreePercent { get; set; }

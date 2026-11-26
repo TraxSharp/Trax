@@ -64,12 +64,12 @@ error rather than a default left in place.
 | `Profiles` | | By name (lowercase letters, digits, `-`): each a `SandboxProfile` with `Image` (`name@sha256:<digest>`; a tag alone is refused), an optional `Command`, and `User` (`uid:gid`, never 0, `65532:65532` by default). |
 | `Caps` | | A `SandboxCaps`, below. |
 | `Podman` | | A `PodmanBackendOptions`: `SocketPath`, the podman API socket only the launcher holds; `HolderImage`, pinned by digest; `HolderCommand`, when the holder image's own command does not block. |
-| `Kubernetes` | | A `KubernetesBackendOptions`: `Namespace` (`trax-sandbox`), `RuntimeClassName` (`kata`), `RunsClaimName` (`trax-sandbox-runs`), `RunsPath` (`/runs`), `NodeName` (from `NODE_NAME` when not set), `PollInterval` (2 seconds) and `RunsMinFreePercent` (15, the share of the runs volume's filesystem that must stay free). |
+| `Kubernetes` | | A `KubernetesBackendOptions`: `Namespace` (`trax-sandbox`), `RuntimeClassName` (`kata`), `OutputStorageClassName` (required: the StorageClass each run's output volume is made on, which must enforce capacity), `CollectorImage` (the launcher's own image, pinned; the manifests set it), `RunsClaimName` (`trax-sandbox-runs`), `RunsPath` (`/runs`), `NodeName` (from `NODE_NAME` when not set), `PollInterval` (2 seconds) and `RunsMinFreePercent` (15, the share of the runs volume's filesystem that must stay free). |
 | `CanaryProbes` | | More `host:port` pairs the startup canary must fail to reach: the hub, the database. |
 
 `Validate()` throws `InvalidOperationException`, naming the first problem, for a missing or short
 key, no listener or two, a socket path not ending in `.sock`, a listen URL that is not an address and a port, no profile, an unpinned image, a root user, an unpinned holder, a relative
-socket, a cluster backend with no node name, a runs path at the root or a `RunsMinFreePercent` outside 1 to 90, or a cap that is not positive.
+socket, a cluster backend with no node name, no `OutputStorageClassName` or `local-path`, an unpinned `CollectorImage`, a runs path at the root or a `RunsMinFreePercent` outside 1 to 90, or a cap that is not positive.
 
 ### SandboxCaps
 
@@ -93,7 +93,10 @@ lowered.
 
 On start, before it listens:
 
-1. It refuses any configuration `Validate()` refuses.
+1. It refuses any configuration `Validate()` refuses, and on a cluster an `OutputStorageClassName`
+   that does not exist or is provisioned by a host-path provisioner (`rancher.io/local-path`,
+   `kubernetes.io/no-provisioner`, minikube's, Docker Desktop's, MicroK8s's and OpenEBS's
+   host-path ones), which enforce no size.
 2. It removes whatever an earlier launcher process left behind: containers, pods and volumes labelled
    `trax.sandbox.launcher` on podman, its Jobs and run directories on a cluster. A run directory
    it cannot remove is logged and left, rather than stopping the start.
@@ -165,32 +168,56 @@ it. Run the launcher as a user of its own, whose rootless podman nothing else us
 The Kubernetes backend creates one Job per run in the dedicated namespace and pins it to the
 launcher's node. The pod names the RuntimeClass, uses a ServiceAccount with no token, no service
 links, no host namespaces and no DNS resolver, runs as the profile's non-root user with every
-capability dropped and a read-only root, and mounts only its own run's `in` (read-only) and `out` on
-the runs claim, by subPath, and an in-memory emptyDir as `/tmp`. The Job dies at the timeout and is
-never retried. The launcher reads the output directory after the pod is gone, without following a
-link or opening anything but a regular file, and checks its size every `PollInterval` while the
-sandbox runs. A walk does not see a file the sandbox deleted while still holding it open, so the
-launcher also reads the runs volume's free space from its filesystem: below `RunsMinFreePercent` no
-run starts, and every running one is killed and fails, its log saying why. Neither check is a
-per-run limit. The claim's size is a ceiling only where its storage class enforces capacity; k3s's
-default `local-path` does not, so there the floor is what keeps the node's disk from filling.
+capability dropped and a read-only root, and mounts its own run's `in` on the runs claim
+(read-only, by subPath), an in-memory emptyDir as `/tmp`, and `/sandbox/out` on a volume of its
+own: a generic ephemeral volume of the run's declared disk on `OutputStorageClassName`, made with the
+pod and deleted with it. The Job dies at the timeout and is never retried.
+
+The output volume's size is the storage's to enforce, so the class must enforce capacity: TopoLVM,
+Longhorn, or a cloud block-storage driver (EBS, Persistent Disk, Azure Disk). A class that rounds
+sizes up caps at the rounded size (TopoLVM's smallest volume is 1 GiB). k3s's default `local-path`
+makes a directory on the node and enforces nothing; the launcher refuses it, by name in `Validate()`
+and by provisioner at startup, so a k3s cluster needs such a class added to run sandboxes. Past
+that the launcher cannot tell whether a class enforces capacity, and takes the deploy's word.
+
+Once the sandbox has exited, and before its pod is deleted (the volume lasts as long as the pod),
+the launcher starts a collector: a Job of the launcher's own image (`CollectorImage`), under the
+same RuntimeClass and hardening, as the profile's user, with the run's output claim mounted
+read-only and only that run's `collected` directory on the runs claim writable. It reads the
+output without following a link or opening anything but a regular file, applies the caps, and
+writes the accepted files as a tar, or the reason it refused them. The launcher reads that tar with
+the same checks once the collector's Job completes, then deletes both Jobs, which deletes the
+output volume. A killed run's output is never collected. The untrusted files are only ever opened
+in the collector's pod, never in the launcher's.
+
+The runs claim holds each run's input and collected tar. The launcher reads its free space from
+its filesystem every `PollInterval`: below `RunsMinFreePercent` no run starts, and every running
+one is killed and fails, its log saying why.
 
 `KubernetesSandboxManifests.Render` writes everything the namespace needs, from the same options,
 as one multi-document YAML, and so does the launcher itself when run with
-`--trax-sandbox-manifests <file> --launcher-image <ref@sha256:...> --hub-namespace <ns>`
-(`--runs-storage` sets the claim's size): it reads its configuration as it would to run, needs no
-key, and starts nothing. The objects are, admission policies first so every later pod is admitted
+`--trax-sandbox-manifests <file> --launcher-image <ref@sha256:...> --hub-namespace <ns>
+--output-storage-class <class>` (`--runs-storage` sets the claim's size): it reads its configuration
+as it would to run, needs no key, and starts nothing. The objects are, admission policies first so every later pod is admitted
 under them: the namespace at Pod Security `restricted`; the launcher's ServiceAccount
 and a Role on Jobs (create, get, list, watch, delete) and pods (get, list, watch), with no
-subresource, so no `pods/exec` or `pods/log`; the sandbox ServiceAccount, with no token and bound to
-nothing; a deny-all NetworkPolicy for sandbox pods and one admitting only the hub's namespace to the
+subresource, so no `pods/exec` or `pods/log`; a ClusterRole and binding that let it `get` the one
+StorageClass it is configured with and nothing else; the sandbox ServiceAccount, with no token and
+bound to nothing; a deny-all NetworkPolicy for sandbox pods and one admitting only the hub's namespace to the
 launcher; the runs claim; the launcher's Deployment (one replica, its key from the Secret named
-`KeySecretName`, every cap, canary probe and runtime setting it was rendered from, and a writable
-`/tmp` on its read-only root) and Service (`LauncherName`); and two ValidatingAdmissionPolicies with their
+`KeySecretName`, every cap, canary probe and runtime setting it was rendered from, its own image as
+`CollectorImage`, a writable `/tmp` on its read-only root, and a memory limit sized from its caps:
+256 MiB, every unverified request body it may hold, and per concurrent run three times the largest
+request and eight times the largest output, about 3.2 GiB with the default caps, which lowering
+`MaxConcurrent`, `MaxInputBytes`, `MaxArchiveBytes` or `MaxResultBytes` lowers) and Service (`LauncherName`); and two ValidatingAdmissionPolicies with their
 bindings. The policies refuse any Job, and any pod other than the launcher's own, that does not
-name the RuntimeClass, run one container from the profiles' digests, use the sandbox ServiceAccount
-with no token, carry only `HOME` and `TMPDIR`, mount only the runs claim and an emptyDir, and stay
-off the host's namespaces; the launcher's pod must run the launcher image. The ServiceAccounts in the
+name the RuntimeClass, run one container, use the sandbox ServiceAccount with no token, carry only
+`HOME` and `TMPDIR`, and stay off the host's namespaces. A sandbox must run an image from the
+profiles' digests and mount only the runs claim read-only, an emptyDir, and one generic ephemeral
+volume of exactly the output shape: the configured class, `ReadWriteOnce`, a filesystem, no data
+source, selector or volume name, and no more than `MaxDiskMiB`. A collector must run the launcher
+image and mount only the runs claim, an emptyDir and a run's output claim read-only. The launcher's
+pod must run the launcher image. The ServiceAccounts in the
 namespace must have no cloud identity: on EKS, create no Pod Identity association or IRSA annotation
 for them. The environment and volume rules refuse a pod a credential webhook has added either to.
 

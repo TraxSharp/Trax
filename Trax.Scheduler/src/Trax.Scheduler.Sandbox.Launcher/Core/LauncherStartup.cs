@@ -5,8 +5,8 @@ using Trax.Scheduler.Sandbox.Launcher.Backends;
 namespace Trax.Scheduler.Sandbox.Launcher.Core;
 
 /// <summary>
-/// Runs before the launcher listens: removes whatever an earlier process left behind, then runs
-/// the canary. A throw here stops the host, so a launcher that cannot prove its sandboxes are
+/// Runs before the launcher listens: the backend's own checks of its environment, then removes
+/// whatever an earlier process left behind, then runs the canary. A throw here stops the host, so a launcher that cannot prove its sandboxes are
 /// isolated never takes a request.
 /// </summary>
 internal sealed class LauncherStartup(
@@ -17,9 +17,10 @@ internal sealed class LauncherStartup(
 {
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        await backend.SweepAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            await backend.PreflightAsync(cancellationToken).ConfigureAwait(false);
+            await backend.SweepAsync(cancellationToken).ConfigureAwait(false);
             await canary.CheckAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (SandboxRuntimeRefusedException ex)

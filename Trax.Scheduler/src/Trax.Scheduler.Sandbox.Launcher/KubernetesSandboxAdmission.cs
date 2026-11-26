@@ -9,9 +9,13 @@ namespace Trax.Scheduler.Sandbox.Launcher;
 /// any Job there, and Pod Security <c>restricted</c> still allows a runc pod, any image, any
 /// ServiceAccount and the environment and volumes a credential webhook injects. These close that:
 /// a Job, and a pod that is not the launcher's own, must name the configured RuntimeClass, run
-/// one container from the deploy's digest allowlist, use the tokenless sandbox ServiceAccount,
-/// carry only HOME and TMPDIR, mount only the runs claim and an emptyDir, and stay off the host's
-/// namespaces. The launcher's own pod must run the launcher image under its own ServiceAccount.
+/// one container, use the tokenless sandbox ServiceAccount, carry only HOME and TMPDIR, and stay
+/// off the host's namespaces. A sandbox runs an image from the deploy's digest allowlist and
+/// mounts only the runs claim read-only, an emptyDir, and one generic ephemeral volume of exactly
+/// the output shape (the configured class, ReadWriteOnce, no data source, no larger than the disk
+/// cap). A collector runs the launcher image and mounts only the runs claim, an emptyDir, and a
+/// run's output claim read-only. The launcher's own pod must run the launcher image under its own
+/// ServiceAccount.
 /// </summary>
 internal static class KubernetesSandboxAdmission
 {
@@ -25,7 +29,7 @@ internal static class KubernetesSandboxAdmission
             JobPolicyName,
             "batch",
             "jobs",
-            JobVariables(),
+            JobVariables(launcherImage),
             SandboxRules(options, "spec").Append(NoLauncherLabelOnJobs()).ToList()
         );
         yield return Binding(JobPolicyName, ns);
@@ -33,18 +37,30 @@ internal static class KubernetesSandboxAdmission
             PodPolicyName,
             "",
             "pods",
-            PodVariables(),
+            PodVariables(launcherImage),
             PodPolicyRules(options, launcherImage).ToList()
         );
         yield return Binding(PodPolicyName, ns);
     }
 
-    private static List<V1Variable> JobVariables() =>
-        [new V1Variable { Name = "spec", Expression = "object.spec.template.spec" }];
+    private static List<V1Variable> JobVariables(string launcherImage) =>
+        [
+            new V1Variable { Name = "spec", Expression = "object.spec.template.spec" },
+            Collector(launcherImage),
+        ];
 
-    private static List<V1Variable> PodVariables() =>
+    /// <summary>Whether the pod spec is a collector's: every container the launcher image.</summary>
+    private static V1Variable Collector(string launcherImage) =>
+        new()
+        {
+            Name = "collector",
+            Expression = $"variables.spec.containers.all(c, c.image == '{launcherImage}')",
+        };
+
+    private static List<V1Variable> PodVariables(string launcherImage) =>
         [
             new V1Variable { Name = "spec", Expression = "object.spec" },
+            Collector(launcherImage),
             new V1Variable
             {
                 Name = "launcher",
@@ -94,10 +110,35 @@ internal static class KubernetesSandboxAdmission
             $"(!has({s}.initContainers) || size({s}.initContainers) == 0) && (!has({s}.ephemeralContainers) || size({s}.ephemeralContainers) == 0)",
             "a sandbox has no init or ephemeral containers"
         );
+        var runs = options.Kubernetes.RunsClaimName;
+        const string ReadOnlyClaim =
+            "has(v.persistentVolumeClaim.readOnly) && v.persistentVolumeClaim.readOnly";
+        var sandbox =
+            $"(has(v.persistentVolumeClaim) && v.persistentVolumeClaim.claimName == '{runs}' && {ReadOnlyClaim})"
+            + $" || (has(v.ephemeral) && {OutputVolumeShape(options)})";
+        var collector =
+            $"has(v.persistentVolumeClaim) && (v.persistentVolumeClaim.claimName == '{runs}'"
+            + $" || (v.persistentVolumeClaim.claimName.matches('^trax-sbx-[0-9a-f]{{32}}-[a-z0-9]{{5}}-{KubernetesJobSpec.OutputVolume}$') && {ReadOnlyClaim}))";
         yield return (
-            $"!has({s}.volumes) || {s}.volumes.all(v, (has(v.persistentVolumeClaim) && v.persistentVolumeClaim.claimName == '{options.Kubernetes.RunsClaimName}') || has(v.emptyDir))",
-            "a sandbox mounts only the runs claim and an emptyDir"
+            $"!has({s}.volumes) || {s}.volumes.all(v, has(v.emptyDir) || (variables.collector ? ({collector}) : ({sandbox})))",
+            "a sandbox mounts only the runs claim read-only, an emptyDir and its output volume; a collector only the runs claim, an emptyDir and a run's output claim read-only"
         );
+    }
+
+    /// <summary>
+    /// A run's output volume and nothing broader: the configured class, ReadWriteOnce, a
+    /// filesystem, no data source to clone another volume from, no selector or volume name to bind
+    /// an existing one, and a request no larger than the disk cap.
+    /// </summary>
+    private static string OutputVolumeShape(SandboxLauncherOptions options)
+    {
+        const string T = "v.ephemeral.volumeClaimTemplate.spec";
+        return $"has(v.ephemeral.volumeClaimTemplate) && has({T}.storageClassName) && {T}.storageClassName == '{options.Kubernetes.OutputStorageClassName}'"
+            + $" && has({T}.accessModes) && {T}.accessModes == ['ReadWriteOnce']"
+            + $" && !has({T}.dataSource) && !has({T}.dataSourceRef) && !has({T}.selector) && !has({T}.volumeName)"
+            + $" && (!has({T}.volumeMode) || {T}.volumeMode == 'Filesystem')"
+            + $" && has({T}.resources) && has({T}.resources.requests) && 'storage' in {T}.resources.requests"
+            + $" && quantity(string({T}.resources.requests['storage'])).compareTo(quantity('{options.Caps.MaxDiskMiB.ToString(System.Globalization.CultureInfo.InvariantCulture)}Mi')) <= 0";
     }
 
     private static IEnumerable<(string Expression, string Message)> ContainerRules(
@@ -113,8 +154,8 @@ internal static class KubernetesSandboxAdmission
                 .Order(StringComparer.Ordinal)
         );
         yield return (
-            $"size({s}.containers) == 1 && {s}.containers.all(c, c.image in [{images}])",
-            "a sandbox runs one container from the deploy's image allowlist"
+            $"size({s}.containers) == 1 && (variables.collector || {s}.containers.all(c, c.image in [{images}]))",
+            "a sandbox runs one container from the deploy's image allowlist, a collector the launcher image"
         );
         yield return (
             $"{s}.containers.all(c, !has(c.envFrom) && (!has(c.env) || c.env.all(e, (e.name == 'HOME' || e.name == 'TMPDIR') && !has(e.valueFrom))))",

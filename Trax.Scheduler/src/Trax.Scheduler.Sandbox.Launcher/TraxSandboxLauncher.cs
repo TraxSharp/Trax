@@ -43,6 +43,24 @@ public static class TraxSandboxLauncher
             await RenderManifestsAsync(configuration, manifests, ct).ConfigureAwait(false);
             return;
         }
+        if (configuration[CollectArgument] is { Length: > 0 } from)
+        {
+            await SandboxOutputCollector
+                .CollectAsync(
+                    from,
+                    configuration[CollectToArgument]
+                        ?? throw new InvalidOperationException(
+                            $"--{CollectToArgument} is required."
+                        ),
+                    SandboxOutputCollector.Limits(
+                        configuration[CollectMaxBytesArgument] ?? "",
+                        configuration[CollectMaxFilesArgument] ?? ""
+                    ),
+                    ct
+                )
+                .ConfigureAwait(false);
+            return;
+        }
 
         var app = Build(args);
         await using (app.ConfigureAwait(false))
@@ -53,9 +71,19 @@ public static class TraxSandboxLauncher
     internal const string ManifestsArgument = "trax-sandbox-manifests";
 
     /// <summary>
+    /// The arguments that make <see cref="RunAsync"/> collect one run's output on a cluster, as the
+    /// collector Job runs it: the output volume, the run's collected directory, and the caps.
+    /// </summary>
+    internal const string CollectArgument = "trax-sandbox-collect";
+    internal const string CollectToArgument = "trax-sandbox-collect-to";
+    internal const string CollectMaxBytesArgument = "trax-sandbox-collect-max-bytes";
+    internal const string CollectMaxFilesArgument = "trax-sandbox-collect-max-files";
+
+    /// <summary>
     /// Writes what <see cref="KubernetesSandboxManifests.Render"/> renders from the launcher's own
     /// configuration to <paramref name="path"/>, for
-    /// <c>--trax-sandbox-manifests &lt;file&gt; --launcher-image &lt;ref@sha256:...&gt; --hub-namespace &lt;ns&gt;</c>.
+    /// <c>--trax-sandbox-manifests &lt;file&gt; --launcher-image &lt;ref@sha256:...&gt; --hub-namespace &lt;ns&gt;
+    /// --output-storage-class &lt;class&gt;</c>.
     /// Needs no key and starts nothing; the profiles are checked as the launcher checks them, so
     /// the admission allowlist is never built from an unpinned image.
     /// </summary>
@@ -67,6 +95,8 @@ public static class TraxSandboxLauncher
     {
         var options = SandboxLauncherOptions.Read(configuration);
         options.Backend = SandboxBackendKind.Kubernetes;
+        if (configuration["output-storage-class"] is { Length: > 0 } storageClass)
+            options.Kubernetes.OutputStorageClassName = storageClass;
         if (options.Profiles.Count == 0)
             throw new InvalidOperationException("No profile is configured to render.");
         foreach (var (name, profile) in options.Profiles)

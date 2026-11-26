@@ -28,6 +28,7 @@ public sealed class HostileJunction(SandboxWorkspace workspace)
             "memory" => Task.FromResult(Hog()),
             "sleep" => SleepAsync(),
             "fill-disk" => FillDiskAsync(),
+            "fill-disk-unlinked" => FillDiskThroughAnUnlinkedFileAsync(),
             "symlink" => Task.FromResult(Link(input)),
             "many-files" => ManyFilesAsync(input),
             "fail" => throw new TrainException(
@@ -174,6 +175,34 @@ public sealed class HostileJunction(SandboxWorkspace workspace)
         await using (stream.ConfigureAwait(false))
             while (true)
                 await stream.WriteAsync(chunk, CancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Deletes a file in its output while holding it open, so no walk of the directory sees it, and
+    /// writes to it until the volume is full. Closes it before answering, which frees the space,
+    /// and reports how many bytes the volume took.
+    /// </summary>
+    private async Task<HostileOutput> FillDiskThroughAnUnlinkedFileAsync()
+    {
+        var chunk = new byte[1024 * 1024];
+        var path = Path.Combine(workspace.FilesDirectory, "hidden.bin");
+        long written = 0;
+        var stream = File.Create(path);
+        await using (stream.ConfigureAwait(false))
+        {
+            File.Delete(path);
+            try
+            {
+                while (true)
+                {
+                    await stream.WriteAsync(chunk, CancellationToken).ConfigureAwait(false);
+                    await stream.FlushAsync(CancellationToken).ConfigureAwait(false);
+                    written += chunk.Length;
+                }
+            }
+            catch (IOException) { }
+        }
+        return new HostileOutput([], [], written.ToString(CultureInfo.InvariantCulture));
     }
 
     /// <summary>Leaves a symbolic link in its output, pointing at the first target.</summary>

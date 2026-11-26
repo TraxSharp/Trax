@@ -8,14 +8,21 @@ namespace Trax.Scheduler.Sandbox.Tests.UnitTests;
 /// A sandbox Job on a cluster: the RuntimeClass, no token, no host namespaces, restricted
 /// security, the declared limits, no network resolver, and the run's own directories only.
 ///
-/// <para>Enforces <c>docs/adr/0020-a-sandbox-is-started-only-by-the-launcher-from-a-fixed-request.md</c>.</para>
+/// <para>Enforces <c>docs/adr/0020-a-sandbox-is-started-only-by-the-launcher-from-a-fixed-request.md</c>,
+/// and <c>docs/adr/0021-a-sandboxs-output-comes-back-on-a-volume-the-launcher-reads-after-it-exits.md</c> for the run's own output volume.</para>
 /// </summary>
 [Property("adr", "docs/adr/0020-a-sandbox-is-started-only-by-the-launcher-from-a-fixed-request.md")]
+[Property(
+    "adr",
+    "docs/adr/0021-a-sandboxs-output-comes-back-on-a-volume-the-launcher-reads-after-it-exits.md"
+)]
 [TestFixture]
 public class KubernetesJobSpecTests
 {
     private const string Adr =
         "docs/adr/0020-a-sandbox-is-started-only-by-the-launcher-from-a-fixed-request.md";
+    private const string OutputAdr =
+        "docs/adr/0021-a-sandboxs-output-comes-back-on-a-volume-the-launcher-reads-after-it-exits.md";
 
     private const string RunId = "0123456789abcdef0123456789abcdef";
 
@@ -74,7 +81,7 @@ public class KubernetesJobSpecTests
     }
 
     [Test]
-    public void Build_MountsOnlyTheRunsOwnDirectories()
+    public void Build_MountsItsInputReadOnlyAndAnOutputVolumeOfItsOwnDisk()
     {
         var spec = Build().Spec.Template.Spec;
         var mounts = spec.Containers.Single().VolumeMounts;
@@ -89,20 +96,81 @@ public class KubernetesJobSpecTests
         mounts
             .Should()
             .ContainSingle(m =>
-                m.MountPath == "/sandbox/out"
-                && m.SubPath == $"{RunId}/out"
-                && m.ReadOnlyProperty != true
+                m.MountPath == "/sandbox/out" && m.Name == "out" && m.SubPath == null
             );
-        spec.Volumes.Should().HaveCount(2);
+        spec.Volumes.Should().HaveCount(3);
         spec.Volumes.Should()
-            .ContainSingle(v =>
-                v.PersistentVolumeClaim != null
-                && v.PersistentVolumeClaim.ClaimName == "trax-sandbox-runs"
+            .ContainSingle(
+                v =>
+                    v.PersistentVolumeClaim != null
+                    && v.PersistentVolumeClaim.ClaimName == "trax-sandbox-runs"
+                    && v.PersistentVolumeClaim.ReadOnlyProperty == true,
+                "the sandbox writes nothing on the shared volume"
             );
         spec.Volumes.Should()
             .ContainSingle(v => v.EmptyDir != null && v.EmptyDir.Medium == "Memory");
+        var claim = spec
+            .Volumes.Single(v => v.Ephemeral != null)
+            .Ephemeral.VolumeClaimTemplate.Spec;
+        claim.StorageClassName.Should().Be(LauncherOptions.StorageClass, OutputAdr);
+        claim.AccessModes.Should().Equal("ReadWriteOnce");
+        claim.VolumeMode.Should().Be("Filesystem");
+        claim
+            .Resources.Requests["storage"]
+            .ToString()
+            .Should()
+            .Be("64Mi", "the run's declared disk");
+        claim.DataSource.Should().BeNull();
+        claim.DataSourceRef.Should().BeNull();
+        claim.Selector.Should().BeNull();
+        claim.VolumeName.Should().BeNull();
+        spec.SecurityContext.FsGroup.Should()
+            .Be(65532, "the profile's group may write the new volume");
         spec.Volumes.Should()
             .NotContain(v => v.HostPath != null || v.Projected != null || v.Secret != null);
+    }
+
+    [Test]
+    public void BuildCollector_RunsTheLauncherImageOverTheRunsOutputClaimReadOnly()
+    {
+        var options = LauncherOptions.Kubernetes();
+        var job = new SandboxJob(
+            RunId,
+            options.Profiles["escape"],
+            new SandboxLimits(1500, 512, 64, 300),
+            new Dictionary<string, byte[]>(StringComparer.Ordinal)
+        );
+
+        var collector = KubernetesJobSpec.BuildCollector(
+            job,
+            "trax-sbx-claim-out",
+            options.Kubernetes,
+            options.Caps
+        );
+        var pod = collector.Spec.Template.Spec;
+        var container = pod.Containers.Single();
+
+        collector.Metadata.Name.Should().Be($"trax-sbx-{RunId}-collect");
+        container.Image.Should().Be(LauncherOptions.Launcher);
+        container.Command.Should().BeNull("the launcher image's own entry point runs");
+        container.Args.Should().Contain("--trax-sandbox-collect=/collect/out");
+        container.SecurityContext.ReadOnlyRootFilesystem.Should().BeTrue();
+        container.SecurityContext.Capabilities.Drop.Should().Equal("ALL");
+        pod.RuntimeClassName.Should().Be("kata");
+        pod.AutomountServiceAccountToken.Should().BeFalse();
+        pod.DnsPolicy.Should().Be("None");
+        pod.Volumes.Should()
+            .ContainSingle(v =>
+                v.PersistentVolumeClaim != null
+                && v.PersistentVolumeClaim.ClaimName == "trax-sbx-claim-out"
+                && v.PersistentVolumeClaim.ReadOnlyProperty == true
+            );
+        container
+            .VolumeMounts.Should()
+            .ContainSingle(m => m.MountPath == "/collect/run" && m.SubPath == $"{RunId}/collected");
+        collector
+            .Metadata.Labels.Should()
+            .Contain("app.kubernetes.io/managed-by", "trax-sandbox-launcher");
     }
 
     [Test]

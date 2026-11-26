@@ -10,6 +10,11 @@ public static class LauncherOptions
     public const string Holder =
         "localhost/pause@sha256:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210";
 
+    public const string Launcher =
+        "localhost/launcher@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+    public const string StorageClass = "topolvm-provisioner";
+
     public static SandboxLauncherOptions Podman()
     {
         var options = new SandboxLauncherOptions
@@ -29,6 +34,8 @@ public static class LauncherOptions
         var options = Podman();
         options.Backend = SandboxBackendKind.Kubernetes;
         options.Kubernetes.NodeName = "node-a";
+        options.Kubernetes.OutputStorageClassName = StorageClass;
+        options.Kubernetes.CollectorImage = Launcher;
         return options;
     }
 }

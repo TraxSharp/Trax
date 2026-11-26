@@ -9,14 +9,21 @@ namespace Trax.Scheduler.Sandbox.Tests.UnitTests;
 /// pods only, a sandbox account with no token, a deny-all network policy, and admission policies
 /// that refuse a Job or pod not shaped like the launcher's.
 ///
-/// <para>Enforces <c>docs/adr/0020-a-sandbox-is-started-only-by-the-launcher-from-a-fixed-request.md</c>.</para>
+/// <para>Enforces <c>docs/adr/0020-a-sandbox-is-started-only-by-the-launcher-from-a-fixed-request.md</c>,
+/// and <c>docs/adr/0021-a-sandboxs-output-comes-back-on-a-volume-the-launcher-reads-after-it-exits.md</c> for the run's own output volume.</para>
 /// </summary>
 [Property("adr", "docs/adr/0020-a-sandbox-is-started-only-by-the-launcher-from-a-fixed-request.md")]
+[Property(
+    "adr",
+    "docs/adr/0021-a-sandboxs-output-comes-back-on-a-volume-the-launcher-reads-after-it-exits.md"
+)]
 [TestFixture]
 public class KubernetesSandboxManifestsTests
 {
     private const string Adr =
         "docs/adr/0020-a-sandbox-is-started-only-by-the-launcher-from-a-fixed-request.md";
+    private const string OutputAdr =
+        "docs/adr/0021-a-sandboxs-output-comes-back-on-a-volume-the-launcher-reads-after-it-exits.md";
 
     private const string LauncherImage =
         "ghcr.io/example/launcher@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -196,6 +203,74 @@ public class KubernetesSandboxManifestsTests
     }
 
     [Test]
+    public void AdmissionPolicies_AllowExactlyTheOutputVolumeShape()
+    {
+        foreach (var policy in Objects().OfType<V1ValidatingAdmissionPolicy>())
+        {
+            var volumes = policy
+                .Spec.Validations.Single(v =>
+                    v.Expression.Contains("volumes.all(", StringComparison.Ordinal)
+                )
+                .Expression;
+
+            volumes.Should().Contain($"storageClassName == '{LauncherOptions.StorageClass}'");
+            volumes.Should().Contain("accessModes == ['ReadWriteOnce']");
+            volumes.Should().Contain("!has(v.ephemeral.volumeClaimTemplate.spec.dataSource)");
+            volumes.Should().Contain("!has(v.ephemeral.volumeClaimTemplate.spec.dataSourceRef)");
+            volumes.Should().Contain("!has(v.ephemeral.volumeClaimTemplate.spec.volumeName)");
+            volumes
+                .Should()
+                .Contain("compareTo(quantity('2048Mi')) <= 0", "no larger than the disk cap");
+            volumes
+                .Should()
+                .Contain(
+                    "claimName == 'trax-sandbox-runs' && has(v.persistentVolumeClaim.readOnly) && v.persistentVolumeClaim.readOnly",
+                    "a sandbox mounts the shared volume read-only; " + OutputAdr
+                );
+            volumes.Should().NotContain("hostPath");
+            policy
+                .Spec.Variables.Should()
+                .ContainSingle(v =>
+                    v.Name == "collector"
+                    && v.Expression.Contains(LauncherImage, StringComparison.Ordinal)
+                );
+        }
+    }
+
+    [Test]
+    public void Launcher_ReadsOnlyItsOutputStorageClass()
+    {
+        var role = Objects().OfType<V1ClusterRole>().Single();
+        var binding = Objects().OfType<V1ClusterRoleBinding>().Single();
+
+        role.Rules.Should().ContainSingle();
+        role.Rules[0].Resources.Should().Equal("storageclasses");
+        role.Rules[0].ResourceNames.Should().Equal(LauncherOptions.StorageClass);
+        role.Rules[0].Verbs.Should().Equal("get");
+        binding.RoleRef.Name.Should().Be(role.Metadata.Name);
+        binding.Subjects.Single().Name.Should().Be("trax-sandbox-launcher");
+    }
+
+    [Test]
+    public void Launcher_HasAMemoryLimitSizedFromItsCaps()
+    {
+        var options = LauncherOptions.Kubernetes();
+        var limit = Objects()
+            .OfType<V1Deployment>()
+            .Single()
+            .Spec.Template.Spec.Containers.Single()
+            .Resources.Limits["memory"]
+            .ToString();
+        options.Caps.MaxConcurrent = 1;
+
+        limit.Should().Be("3250Mi", "with the default caps");
+        KubernetesSandboxManifests
+            .LauncherMemoryMiB(options.Caps)
+            .Should()
+            .BeLessThan(3250, "fewer concurrent runs need less");
+    }
+
+    [Test]
     public void Objects_AdmissionPoliciesComeBeforeAnythingThatMakesPods()
     {
         var objects = Objects();
@@ -235,6 +310,16 @@ public class KubernetesSandboxManifestsTests
         env.Select(e => e.Name)
             .Should()
             .Contain("Trax__SandboxLauncher__Kubernetes__RunsMinFreePercent");
+        env.Should()
+            .Contain(e =>
+                e.Name == "Trax__SandboxLauncher__Kubernetes__OutputStorageClassName"
+                && e.Value == LauncherOptions.StorageClass
+            );
+        env.Should()
+            .Contain(e =>
+                e.Name == "Trax__SandboxLauncher__Kubernetes__CollectorImage"
+                && e.Value == LauncherImage
+            );
     }
 
     [Test]
