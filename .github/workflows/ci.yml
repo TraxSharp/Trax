@@ -1404,7 +1404,8 @@ jobs:
   # TRAX_SANDBOX_ASSUME_ISOLATED: that proves the launcher's mechanics (no network, the locked-down
   # spec, the caps, the output checks, nothing left behind), not the isolation, and the canary tests
   # still prove crun itself is refused. TRAX_SANDBOX_ESCAPE_REQUIRED turns the suite's skip into a
-  # failure, so a missing socket or image cannot pass as green.
+  # failure, so a missing socket or image cannot pass as green, and TreatNoTestsAsError does the same for a
+  # filter that no longer matches a test.
   sandbox-escape:
     needs: changes
     if: contains(fromJSON(needs.changes.outputs.folders), 'Trax.Scheduler')
@@ -1479,6 +1480,7 @@ jobs:
         run: >
           dotnet test Trax.Scheduler/tests/Trax.Scheduler.Sandbox.Tests -c Release --no-restore -warnaserror
           --filter "FullyQualifiedName~Trax.Scheduler.Sandbox.Tests.EscapeTests.PodmanEscapeTests"
+          -- RunConfiguration.TreatNoTestsAsError=true
 
   # The release tooling at the root: semantic-release's config and the plugin in .github/release
   # that adds pull requests' release notes, and the tests of the change detection in .github/scripts
