@@ -94,7 +94,7 @@ lowered.
 On start, before it listens:
 
 1. It refuses any configuration `Validate()` refuses.
-2. It removes whatever an earlier launcher process left behind: containers and volumes labelled
+2. It removes whatever an earlier launcher process left behind: containers, pods and volumes labelled
    `trax.sandbox.launcher` on podman, its Jobs and run directories on a cluster. A run directory
    it cannot remove is logged and left, rather than stopping the start.
 3. It runs the canary: one sandbox under the configured runtime, with `canary.json` in place of a
@@ -127,15 +127,29 @@ Podman cannot run Kata: Kata Containers 4 has no OCI command line for it to call
 configured the podman backend's canary fails and says so. On podman the isolating runtime is
 gVisor; one machine with Kata is k3s and the Kubernetes backend below.
 
-The podman backend talks to rootless podman through its API socket. Per run it makes an input and
-an output volume, both tmpfs with a size (the output's is the declared disk), and a holder: a
+The podman backend talks to rootless podman through its API socket. Podman before 6.0 ignores the
+runtime a container asks for and uses its service's default, so there start the service under the
+runtime by name (`podman --runtime runsc system service ...`). The launcher reads back the runtime
+podman created each sandbox under, before starting it, and fails the run (and, at startup, the
+canary, as a missing runtime) when it is not the configured one.
+
+Per run it makes a pod with no infra container and nothing shared, which the sandbox runs in only
+for the cgroup it gets; an input and
+an output volume, both tmpfs with a size (the output's is the declared disk); and a holder: a
 container of `HolderImage` under podman's default runtime that keeps both mounted, since a tmpfs
 volume's contents go when the last container using it stops. The sandbox itself runs the profile's
 image under the configured runtime with no network namespace but loopback, a read-only root, every
 capability dropped, no new privileges, the declared memory (and no swap beyond it), CPU and the pids
 cap, a tmpfs `/tmp` of the declared disk, the input read-only and the output `noexec`. The input
 goes in, and the output comes out, through the holder; the sandbox is never exec'd into. Every
-container and volume of the run is removed afterwards, whatever happened.
+container, pod and volume of the run is removed afterwards, whatever happened.
+
+A sandbox killed for memory is reported `OutOfMemory` when podman says so, or when it exited 137
+and its pod's cgroup counted an out-of-memory kill in `memory.events`. Rootless podman under
+systemd can lose the container's own cgroup before conmon reads it and then reports only the exit
+code; the pod's cgroup lasts until the pod is removed. The launcher reads it under
+`/sys/fs/cgroup`, so a launcher that cannot see the host's cgroups reports such a run `Exited` with
+code 137.
 
 Never mount the podman socket into the hub or a sandbox: it is a way out of any container holding
 it. Run the launcher as a user of its own, whose rootless podman nothing else uses.

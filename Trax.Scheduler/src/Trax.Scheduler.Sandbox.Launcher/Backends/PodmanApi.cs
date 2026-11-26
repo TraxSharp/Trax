@@ -40,6 +40,33 @@ internal sealed class PodmanApi(HttpClient http)
             allowNotFound: true
         );
 
+    /// <summary>Creates a pod with no infra container and nothing shared, only for the cgroup it gives its containers.</summary>
+    public Task CreatePodAsync(
+        string name,
+        IReadOnlyDictionary<string, string> labels,
+        CancellationToken ct
+    ) =>
+        SendAsync(
+            HttpMethod.Post,
+            "/pods/create",
+            new JsonObject
+            {
+                ["name"] = name,
+                ["no_infra"] = true,
+                ["labels"] = ToObject(labels),
+            },
+            ct
+        );
+
+    public Task RemovePodAsync(string name, CancellationToken ct) =>
+        SendAsync(
+            HttpMethod.Delete,
+            $"/pods/{Escape(name)}?force=true&t=0",
+            body: null,
+            ct,
+            allowNotFound: true
+        );
+
     public async Task<string> CreateContainerAsync(JsonObject spec, CancellationToken ct)
     {
         using var response = await SendKeepAsync(HttpMethod.Post, "/containers/create", spec, ct)
@@ -141,8 +168,15 @@ internal sealed class PodmanApi(HttpClient http)
         );
 
     /// <summary>The names of the containers, or of the volumes, carrying <paramref name="label"/>.</summary>
-    public async Task<IReadOnlyList<string>> ListAsync(
+    public Task<IReadOnlyList<string>> ListAsync(
         bool volumes,
+        string label,
+        CancellationToken ct
+    ) => ListAsync(volumes ? PodmanKind.Volume : PodmanKind.Container, label, ct);
+
+    /// <summary>The ids of the containers or pods, or the names of the volumes, carrying <paramref name="label"/>.</summary>
+    public async Task<IReadOnlyList<string>> ListAsync(
+        PodmanKind kind,
         string label,
         CancellationToken ct
     )
@@ -152,15 +186,22 @@ internal sealed class PodmanApi(HttpClient http)
                 new Dictionary<string, string[]>(StringComparer.Ordinal) { ["label"] = [label] }
             )
         );
-        var path = volumes
-            ? $"/volumes/json?filters={filters}"
-            : $"/containers/json?all=true&filters={filters}";
+        var path = kind switch
+        {
+            PodmanKind.Volume => $"/volumes/json?filters={filters}",
+            PodmanKind.Pod => $"/pods/json?filters={filters}",
+            _ => $"/containers/json?all=true&filters={filters}",
+        };
         using var response = await SendKeepAsync(HttpMethod.Get, path, body: null, ct)
             .ConfigureAwait(false);
         var items =
             await response.Content.ReadFromJsonAsync<JsonArray>(ct).ConfigureAwait(false) ?? [];
         return items
-            .Select(i => volumes ? i?["Name"]?.GetValue<string>() : i?["Id"]?.GetValue<string>())
+            .Select(i =>
+                kind == PodmanKind.Volume
+                    ? i?["Name"]?.GetValue<string>()
+                    : i?["Id"]?.GetValue<string>()
+            )
             .OfType<string>()
             .ToList();
     }

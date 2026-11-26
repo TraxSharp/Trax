@@ -152,7 +152,7 @@ internal sealed class PodmanEscape : IAsyncDisposable
     /// <summary>The launcher's own HTTP client, for requests a hub's client would never make.</summary>
     public HttpClient Raw() => _app.GetTestClient();
 
-    /// <summary>The containers and volumes the launcher made that still exist.</summary>
+    /// <summary>The containers, pods and volumes the launcher made that still exist.</summary>
     public async Task<int> LeftoversAsync()
     {
         var containers = await Api.ListAsync(
@@ -167,7 +167,13 @@ internal sealed class PodmanEscape : IAsyncDisposable
                 CancellationToken.None
             )
             .ConfigureAwait(false);
-        return containers.Count + volumes.Count;
+        var pods = await Api.ListAsync(
+                PodmanKind.Pod,
+                PodmanSandboxBackend.LauncherLabel,
+                CancellationToken.None
+            )
+            .ConfigureAwait(false);
+        return containers.Count + volumes.Count + pods.Count;
     }
 
     public async ValueTask DisposeAsync()

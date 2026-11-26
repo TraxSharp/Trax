@@ -22,7 +22,10 @@ the launcher itself or any address the deploy adds. Otherwise the launcher does 
 
 Because the runtime's name proves nothing. A RuntimeClass called `kata` can map to runc, a podman
 runtime entry can point anywhere, and a cluster's network plugin may not enforce NetworkPolicy at
-all. The canary checks what the sandbox actually sees, so a misconfigured runtime or network fails
+all. Podman before 6.0 goes further and ignores the runtime a container asks for, using its
+service's default, so the podman backend reads back the runtime each sandbox was created under and
+refuses any other before starting it; at startup that is the canary failing as a missing runtime,
+not as the node's own kernel. The canary checks what the sandbox actually sees, so a misconfigured runtime or network fails
 the launcher's start rather than its first escape.
 
 - **Plain rootless podman.** Rejected: a container shares the host kernel, and a kernel escape
@@ -64,6 +67,8 @@ virtualisation, so the podman suite runs under crun and the cluster suite skips 
 
 ## Changelog
 
+- **2026-11-25**: The podman backend refuses a sandbox podman created under a runtime other than
+  the configured one, before it starts; CI starts its podman service under crun by name.
 - **2026-11-25**: CI runs the podman escape suite under crun, failing rather than skipping when
   its socket or image is missing.
 - **2026-11-24**: Podman cannot run Kata 4, so one machine with Kata is k3s with the Kubernetes

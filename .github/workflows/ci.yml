@@ -1445,10 +1445,13 @@ jobs:
         with:
           global-json-file: global.json
       - name: Start the podman API
+        # Under crun by name: podman before 6 (the runner's is 4.9) ignores a container's own
+        # runtime and uses the service's, and the launcher refuses a sandbox podman created under
+        # any runtime but the one it asked for.
         run: |
           set -euo pipefail
           sock=$RUNNER_TEMP/podman.sock
-          nohup podman system service --time=0 "unix://$sock" >"$RUNNER_TEMP/podman-service.log" 2>&1 &
+          nohup podman --runtime crun system service --time=0 "unix://$sock" >"$RUNNER_TEMP/podman-service.log" 2>&1 &
           for _ in $(seq 30); do [ -S "$sock" ] && break; sleep 1; done
           [ -S "$sock" ] || { cat "$RUNNER_TEMP/podman-service.log"; exit 1; }
           echo "TRAX_SANDBOX_PODMAN_SOCKET=$sock" >>"$GITHUB_ENV"

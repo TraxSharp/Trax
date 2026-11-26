@@ -24,6 +24,12 @@ public sealed class FakePodman : HttpMessageHandler
     /// <summary>Creating the sandbox (not the holder) fails like a missing runtime.</summary>
     public bool RuntimeMissing { get; set; }
 
+    /// <summary>Creates every container under this runtime whatever it was asked for, as podman before 6 does.</summary>
+    public string? DefaultRuntimeOnly { get; set; }
+
+    /// <summary>The sandbox's cgroup as podman reports it while it runs.</summary>
+    public string? CgroupPath { get; set; }
+
     public byte[]? PutArchive { get; private set; }
 
     protected override async Task<HttpResponseMessage> SendAsync(
@@ -69,15 +75,29 @@ public sealed class FakePodman : HttpMessageHandler
             };
 
         if (request.Method == HttpMethod.Get && path.EndsWith("/json", StringComparison.Ordinal))
-            return Json(
-                HttpStatusCode.OK,
-                $"{{\"State\":{{\"OOMKilled\":{(OomKilled ? "true" : "false")}}}}}"
-            );
+            return Json(HttpStatusCode.OK, Inspect(path));
 
         if (request.Method == HttpMethod.Get)
             return Json(HttpStatusCode.OK, "[]");
 
         return new HttpResponseMessage(HttpStatusCode.NoContent);
+    }
+
+    private string Inspect(string path)
+    {
+        var id = Uri.UnescapeDataString(path.Split('/')[^2]);
+        var runtime =
+            DefaultRuntimeOnly
+            ?? (
+                Created.TryGetValue(id, out var spec)
+                    ? spec["oci_runtime"]?.GetValue<string>()
+                    : null
+            )
+            ?? "crun";
+        var state = new JsonObject { ["OOMKilled"] = OomKilled };
+        if (CgroupPath is not null)
+            state["CgroupPath"] = CgroupPath;
+        return new JsonObject { ["OCIRuntime"] = runtime, ["State"] = state }.ToJsonString();
     }
 
     private async Task<HttpResponseMessage> CreateAsync(
