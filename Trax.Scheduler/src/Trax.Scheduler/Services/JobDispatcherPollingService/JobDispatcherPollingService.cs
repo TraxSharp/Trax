@@ -122,12 +122,36 @@ internal sealed class JobDispatcherPollingService(
         _drained = drained;
     }
 
+    /// <summary>
+    /// Reads the drain while dispatch is paused, so the console's Drained mark still follows a
+    /// drain set, ended or lapsed meanwhile. A failed read is only logged: a paused dispatcher
+    /// reports "paused", not a failed cycle.
+    /// </summary>
+    private async Task SignalDrainWhilePausedAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var scope = serviceProvider.CreateAsyncScope();
+            await using var scopeDisposal = scope.ConfigureAwait(false);
+            SignalDrainChange(
+                await SchedulerDrain
+                    .IsDrainedAsync(scope.ServiceProvider, cancellationToken)
+                    .ConfigureAwait(false)
+            );
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger.LogDebug(ex, "The drain could not be read while the JobDispatcher is paused");
+        }
+    }
+
     private async Task RunJobDispatcher(CancellationToken cancellationToken)
     {
         _cycleStarted = Clock.GetTimestamp();
 
         if (!configuration.JobDispatcherEnabled)
         {
+            await SignalDrainWhilePausedAsync(cancellationToken).ConfigureAwait(false);
             // The loop is alive and doing what it was told; stamping it means re-enabling the
             // dispatcher does not start from a stale timestamp. The health check reports "paused".
             livenessMonitor.RecordDispatchCycle();

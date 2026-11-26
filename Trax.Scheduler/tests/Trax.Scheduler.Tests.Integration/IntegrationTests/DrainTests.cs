@@ -241,17 +241,23 @@ public class DrainTests : TestSetup
         }
     }
 
-    [Test]
-    public async Task The_dispatcher_signals_a_scheduler_change_when_the_drain_begins_or_ends()
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task The_dispatcher_signals_a_scheduler_change_when_the_drain_begins_or_ends(
+        bool dispatching
+    )
     {
         // A deploy drains and resumes from processes that serve nothing, so the hub's console learns of it from the
-        // dispatcher, which reads the row every cycle.
+        // dispatcher, which reads the row every cycle, paused from the console or not.
         var signals = new RecordingChangeSignal();
         var monitor = new SchedulerLivenessMonitor(TimeProvider.System);
         var wake = new DispatcherWake();
+        var configuration = dispatching
+            ? Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>()
+            : new SchedulerConfiguration { JobDispatcherEnabled = false };
         var service = new JobDispatcherPollingService(
             new SignalOverride(Scope.ServiceProvider, signals),
-            Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>(),
+            configuration,
             monitor,
             wake,
             Scope.ServiceProvider.GetRequiredService<ILogger<JobDispatcherPollingService>>()
