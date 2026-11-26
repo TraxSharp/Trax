@@ -798,8 +798,8 @@ the cluster, the ECS network or the compose stack, the way the migration does, w
 a flag in the database that stops every host starting new work (the dispatcher dispatches nothing, the manifest
 manager queues no scheduled run, no worker claims a job) and waits for what is busy to finish, runs and machine
 instances alike. Nothing outside reaches the app to do it. Once the hosts are replaced, `--trax-resume` ends the
-drain; a hub that starts ends it too, and a drain a crashed deploy left behind lapses on its own after the timeout
-plus ten minutes. A first deploy has nothing to drain and skips it. [Drain before a deploy](/docs/reference/drain-before-a-deploy) explains
+drain. A hub that starts leaves it in place: a drain a failed resume or a crashed deploy left behind ends with Resume
+on the console's scheduler page, or lapses on its own after the timeout plus ten minutes. A first deploy has nothing to drain and skips it. [Drain before a deploy](/docs/reference/drain-before-a-deploy) explains
 what counts as busy and what to do when a deploy refuses; [TraxDrain](/docs/sdk-reference/configuration/trax-drain) has the
 arguments.
 
@@ -1081,7 +1081,8 @@ What it applies, in this order:
    `progressDeadlineSeconds: 300`, so a rollout that makes no progress for five minutes (a crash loop, an image that
    never passes readiness) ends the wait as soon as the cluster marks it, not at ten minutes;
 10. the resume Job `<app>-resume-<tag>` (`--trax-resume`), after a rollback too. If it fails the deploy still stands
-   and says so: the new hub ended the drain when it started, and one left behind lapses on its own.
+   and says so: the drain it left behind ends with Resume on the console's scheduler page, or lapses on its own. A
+   hub that starts leaves it in place.
 
 A Job or a rollout whose pod can never start ends its wait at once rather than at its deadline, saying why: an image
 it cannot pull, a Secret key it cannot read, a node that cannot give it a user namespace of its own. So does a pod no
@@ -1096,7 +1097,8 @@ strategy it had) and is waited on, and one this deploy created is deleted. The e
 and ends with what was done. The migration is not undone: the version before it served while it ran, so it must
 already work on the new schema. A first deploy has nothing to go back to and is left as it is. If the rollback itself
 does not roll out, the error says the services are in between versions. A deploy you interrupt (Ctrl-C) is not rolled
-back, and its drain is not ended: it lapses after the timeout plus ten minutes, or a hub that starts ends it.
+back, and its drain is not ended: it lapses after the timeout plus ten minutes, or Resume on the console's scheduler
+page ends it. Restarting a hub does not.
 
 Services, Deployments and the StatefulSet are applied server-side under the field manager `trax`. Every object
 carries `app.kubernetes.io/name`, `app.kubernetes.io/part-of: <app>`, `app.kubernetes.io/managed-by: trax` and

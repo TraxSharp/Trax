@@ -123,9 +123,9 @@ Each step is where it is for a reason:
   back, and one this deploy created is deleted, as ECS's circuit breaker does. A first deploy has nothing to go back
   to. On a tailnet exposure the proxy secret this deploy replaced is written back first, since the old hub still
   holds it and the edge put back beside it reads the Secret as it starts.
-- **The resume Job** ends the drain, after a rollback too. A hub that starts ends it as well, so a resume that fails
-  does not undo the deploy, and a drain a deploy left behind (Ctrl-C, a crash) lapses on its own after its timeout
-  plus ten minutes.
+- **The resume Job** ends the drain, after a rollback too. A hub that starts leaves it in place, so only the resume,
+  Resume on the console's scheduler page or the lapse ends it. A resume that fails does not undo the deploy, and a
+  drain a deploy left behind (Ctrl-C, a crash) lapses on its own after its timeout plus ten minutes.
 
 The drain, the migration and the resume reach the database from inside the cluster, through the app's own image.
 Nothing outside the cluster has to reach the app to deploy it.

@@ -236,8 +236,8 @@ public partial class DeployComposeTests
                 condition: service_healthy
             restart: unless-stopped
 
-          # Once every service has started, the drain ends and every host takes work again. A scheduler host that
-          # starts ends it too; this covers a release that restarted none.
+          # Once every service has started, the drain ends and every host takes work again. A hub that starts
+          # leaves it in place; Resume in the console ends it, or it lapses on its own.
           resume:
             image: orders-hub:${TRAX_IMAGE_TAG:-latest}
             command: ["--trax-resume"]

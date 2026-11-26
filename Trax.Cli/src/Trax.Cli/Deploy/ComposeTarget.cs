@@ -306,9 +306,11 @@ internal static class ComposeTarget
         var held = egress is not null && file.Services[migrator].Egress is not null;
         y.AppendLine();
         y.AppendLine(
-            "  # Once every service has started, the drain ends and every host takes work again. A scheduler host that"
+            "  # Once every service has started, the drain ends and every host takes work again. A hub that starts"
         );
-        y.AppendLine("  # starts ends it too; this covers a release that restarted none.");
+        y.AppendLine(
+            "  # leaves it in place; Resume in the console ends it, or it lapses on its own."
+        );
         y.AppendLine("  resume:");
         y.AppendLine($"    image: {Image(file, migrator)}");
         y.AppendLine($"    command: [\"{TraxDrain.ResumeArgument}\"]");
