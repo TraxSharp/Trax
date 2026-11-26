@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/netip"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -30,6 +31,14 @@ const (
 
 // EnvDeny lists more host:port destinations that must be blocked, such as the host's WAN address or a tailnet peer.
 const EnvDeny = "TRAX_EGRESS_CHECK_DENY"
+
+// EnvOutside names the public IPv4 address the outside probes use, a resolver that answers DNS on 53 and TLS on 443.
+// Unset, it is DefaultOutside. A firewall that lets the check's host reach only some of a resolver's addresses (CI's
+// harden-runner allows the one it resolved) sets it to that address, so a probe it blocks is blocked by the egress.
+const EnvOutside = "TRAX_EGRESS_CHECK_OUTSIDE"
+
+// DefaultOutside is Cloudflare's resolver.
+const DefaultOutside = "1.1.1.1"
 
 // DefaultDeny is probed on every run: cloud metadata (EC2's and EKS Pod Identity's), each private range, the
 // tailnet's resolver, and a public IPv6 address.
@@ -61,7 +70,7 @@ type Result struct {
 func (r Result) OK() bool { return r.Got == r.Probe.Want }
 
 // Probes builds the probes for list, plus deny, the extra destinations that must be blocked.
-func Probes(list allow.List, deny []string) []Probe {
+func Probes(list allow.List, deny []string, outside string) []Probe {
 	var probes []Probe
 	// The control: an address nothing answers on. Without the egress the connection times out; with it the
 	// rules hand it to the proxy, which accepts and resets it. A check that sees no interception is not
@@ -103,11 +112,11 @@ func Probes(list allow.List, deny []string) []Probe {
 				}
 				return Open
 			}},
-			Probe{"dns", unlisted + " @1.1.1.1", Blocked, func(ctx context.Context) string {
-				return dnsDirect(ctx, "1.1.1.1:53", unlisted)
+			Probe{"dns", unlisted + " @" + outside, Blocked, func(ctx context.Context) string {
+				return dnsDirect(ctx, net.JoinHostPort(outside, "53"), unlisted)
 			}},
-			Probe{"tls", unlisted + " via 1.1.1.1:443", Blocked, func(ctx context.Context) string {
-				return tlsProbe(ctx, "1.1.1.1:443", unlisted)
+			Probe{"tls", unlisted + " via " + outside + ":443", Blocked, func(ctx context.Context) string {
+				return tlsProbe(ctx, net.JoinHostPort(outside, "443"), unlisted)
 			}},
 		)
 	}
@@ -182,6 +191,20 @@ func ParseDeny(text string) ([]string, error) {
 		out = append(out, f)
 	}
 	return out, nil
+}
+
+// ParseOutside reads EnvOutside: empty is DefaultOutside, anything else must be a public IPv4 address.
+func ParseOutside(text string) (string, error) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return DefaultOutside, nil
+	}
+	ip, err := netip.ParseAddr(text)
+	if err != nil || !ip.Is4() || ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsUnspecified() ||
+		ip.IsMulticast() {
+		return "", fmt.Errorf("%s: %q is not a public IPv4 address", EnvOutside, text)
+	}
+	return ip.String(), nil
 }
 
 func dialTimeout(ctx context.Context, network, address string, d time.Duration) (net.Conn, error) {

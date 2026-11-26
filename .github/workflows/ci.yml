@@ -1388,12 +1388,13 @@ jobs:
       - name: Build the image
         run: podman build --build-arg VERSION=ci -t localhost/trax-egress:ci .
       - name: Run the image in real network namespaces
-        # one.one.one.one (1.1.1.1) is allowed above so the e2e's outside probes can fail: the e2e first reaches it
-        # from a container with no egress, then must find it blocked from behind the egress. Resolving it here lets
-        # harden-runner learn its addresses before the containers dial them.
+        # one.one.one.one is allowed above so the e2e's outside probes can fail: the e2e first reaches it from a
+        # container with no egress, then must find it blocked from behind the egress. harden-runner allows the
+        # address it resolved, one of 1.1.1.1 and 1.0.0.1, so the e2e is given that one.
         run: |
-          getent ahostsv4 one.one.one.one
-          test/e2e.sh localhost/trax-egress:ci api.github.com
+          outside=$(getent ahostsv4 one.one.one.one | awk 'NR == 1 { print $1 }')
+          echo "one.one.one.one resolved to $outside"
+          E2E_OUTSIDE=$outside test/e2e.sh localhost/trax-egress:ci api.github.com
       - name: Install qemu for the arm64 build
         run: |
           sudo apt-get update -q

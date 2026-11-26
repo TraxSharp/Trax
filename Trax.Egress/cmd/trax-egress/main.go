@@ -258,7 +258,11 @@ func runCheck() error {
 	if err != nil {
 		return err
 	}
-	results := check.Run(context.Background(), check.Probes(list, deny))
+	outside, err := check.ParseOutside(os.Getenv(check.EnvOutside))
+	if err != nil {
+		return err
+	}
+	results := check.Run(context.Background(), check.Probes(list, deny, outside))
 	if !check.Report(os.Stdout, results) {
 		return errors.New("a probe did not do what it must")
 	}

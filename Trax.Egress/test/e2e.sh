@@ -10,7 +10,7 @@
 #      joining the sidecar's network and PID namespaces, and the same stop when a process of the egress uid appears.
 #
 # The app shares one PID namespace with the sidecar, as trax deploy renders it, so the sidecar sees its processes.
-# First, a control: the outside address the probes expect blocked (1.1.1.1) must answer from a container with no
+# First, a control: the outside address the probes expect blocked (E2E_OUTSIDE) must answer from a container with no
 # egress, or a firewall around the run would make those probes pass by itself.
 # Each pod sits on a network of its own with a "database" (listed, must open) and an "other" service on the same
 # port (not listed, must stay blocked), so the in-cluster allowance and the LAN refusal are both exercised.
@@ -28,6 +28,9 @@ image=${1:?usage: test/e2e.sh <image> [allowed-domain]}
 domain=${2:-api.github.com}
 name="trax-egress-e2e-$$"
 app_uid=1654
+# The public resolver the outside probes use. A firewall that allows only some of a resolver's addresses (CI's
+# harden-runner allows the one it resolved for one.one.one.one) passes that one as E2E_OUTSIDE.
+outside=${E2E_OUTSIDE:-1.1.1.1}
 fail=0
 
 cleanup() {
@@ -77,7 +80,8 @@ check() {
   label=$1
   shift
   if podman run --rm "$@" --user "$app_uid:$app_uid" --cap-drop ALL --security-opt no-new-privileges \
-    -e TRAX_EGRESS_ALLOW="$allow" -e TRAX_EGRESS_CHECK_DENY="$deny" "$image" check; then
+    -e TRAX_EGRESS_ALLOW="$allow" -e TRAX_EGRESS_CHECK_DENY="$deny" -e TRAX_EGRESS_CHECK_OUTSIDE="$outside" \
+    "$image" check; then
     echo "-> $label: as intended"
   else
     echo "!! $label: the check failed; the sidecar's log:"
@@ -87,24 +91,23 @@ check() {
 }
 
 say "control: the outside destinations the probes use answer without the egress"
-# The check's outside probes (DNS to 1.1.1.1, TLS to 1.1.1.1:443) and the fail-closed probe below must be blocked
-# by the egress and nothing else. Behind a firewall that already drops 1.1.1.1 (CI's harden-runner, unless the job
-# allows one.one.one.one) they would read blocked whatever the egress did, so from a container with no egress both
-# must answer first.
+# The check's outside probes (DNS and TLS to $outside) must be blocked by the egress and nothing else. Behind a
+# firewall that already drops that address (CI's harden-runner, unless the job allows it) they would read blocked
+# whatever the egress did, so from a container with no egress both must answer first.
 control() {
   # shellcheck disable=SC2086 # pod_dns is a list of options
   podman run --rm --network "$name" $pod_dns --user "$app_uid:$app_uid" --cap-drop ALL --entrypoint sh "$image" -c "$1"
 }
-if control 'nc -z -w 5 1.1.1.1 443'; then
-  echo "-> 1.1.1.1:443 answers without the egress"
+if control "nc -z -w 5 $outside 443"; then
+  echo "-> $outside:443 answers without the egress"
 else
-  echo "!! 1.1.1.1:443 does not answer without the egress, so the probe that it is blocked would prove nothing"
+  echo "!! $outside:443 does not answer without the egress, so the probe that it is blocked would prove nothing"
   exit 1
 fi
-if control 'nslookup -type=a example.com 1.1.1.1 >/dev/null'; then
-  echo "-> DNS on 1.1.1.1:53 answers without the egress"
+if control "nslookup -type=a example.com $outside >/dev/null"; then
+  echo "-> DNS on $outside:53 answers without the egress"
 else
-  echo "!! DNS on 1.1.1.1:53 does not answer without the egress, so the probe that it is blocked would prove nothing"
+  echo "!! DNS on $outside:53 does not answer without the egress, so the probe that it is blocked would prove nothing"
   exit 1
 fi
 
@@ -155,7 +158,7 @@ closed=$(podman run --rm --pod "$name-k8s" --user "$app_uid:$app_uid" --cap-drop
   wget -q -T 5 -O /dev/null https://$domain/ 2>/dev/null && out=\"\$out https\"
   nslookup $domain >/dev/null 2>&1 && out=\"\$out dns\"
   nc -z -w 3 database 5432 2>/dev/null && out=\"\$out database\"
-  nc -z -w 3 1.1.1.1 443 2>/dev/null && out=\"\$out direct\"
+  nc -z -w 3 $outside 443 2>/dev/null && out=\"\$out direct\"
   echo \"\$out\"")
 if [ -n "$closed" ]; then
   echo "!! with the sidecar stopped these still worked:$closed"

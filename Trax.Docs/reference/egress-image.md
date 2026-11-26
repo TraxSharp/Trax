@@ -161,7 +161,8 @@ it, instance metadata, the EKS Pod Identity agent, each private range, the tailn
 and `nft list ruleset` and `nft flush ruleset`. Add more with `TRAX_EGRESS_CHECK_DENY` (`host:port`, separated by
 spaces or commas), such as the host's WAN address or a peer. Its first probe is a control: a connection to
 `192.0.2.1:9`, which nothing answers, must be intercepted by the proxy. Without it a check run outside the egress
-would report everything blocked.
+would report everything blocked. The outside resolver is `1.1.1.1` unless `TRAX_EGRESS_CHECK_OUTSIDE` names another
+public IPv4 address that answers DNS and TLS, for a host whose firewall lets only that one out.
 
 ```bash
 podman run --rm --pod my-pod --user 1654:1654 --cap-drop ALL \

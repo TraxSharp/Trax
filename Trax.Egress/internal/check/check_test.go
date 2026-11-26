@@ -17,7 +17,7 @@ func TestProbesCoverTheListAndTheDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	probes := Probes(l, []string{"203.0.113.9:443"})
+	probes := Probes(l, []string{"203.0.113.9:443"}, DefaultOutside)
 	var lines []string
 	for _, p := range probes {
 		lines = append(lines, p.Kind+" "+p.Target+" "+p.Want)
@@ -50,7 +50,7 @@ func TestProbesCoverTheListAndTheDefaults(t *testing.T) {
 
 func TestAListedExampleNameIsNotTheDNSProbe(t *testing.T) {
 	l, _ := allow.Parse("example.com")
-	for _, p := range Probes(l, nil) {
+	for _, p := range Probes(l, nil, DefaultOutside) {
 		if p.Kind == "dns" && strings.HasPrefix(p.Target, "example.com") {
 			t.Fatalf("probed a listed name as blocked: %s", p.Target)
 		}
@@ -109,6 +109,40 @@ func TestTheControlCountsAResetAsIntercepted(t *testing.T) {
 	for name, c := range cases {
 		if got := Control(c.err); !strings.HasPrefix(got, c.want) || (c.want == Intercepted && got != c.want) {
 			t.Errorf("%s: got %q, want %q", name, got, c.want)
+		}
+	}
+}
+
+func TestTheOutsideProbesUseTheGivenAddress(t *testing.T) {
+	l, err := allow.Parse("api.github.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, p := range Probes(l, nil, "1.0.0.1") {
+		names = append(names, p.Kind+" "+p.Target)
+	}
+	got := strings.Join(names, "\n")
+	for _, want := range []string{"dns example.com @1.0.0.1", "tls example.com via 1.0.0.1:443"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("no probe %q in\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "1.1.1.1") {
+		t.Errorf("a probe still names 1.1.1.1:\n%s", got)
+	}
+}
+
+func TestParseOutside(t *testing.T) {
+	if got, err := ParseOutside(""); err != nil || got != DefaultOutside {
+		t.Errorf("empty: %q, %v", got, err)
+	}
+	if got, err := ParseOutside(" 1.0.0.1 "); err != nil || got != "1.0.0.1" {
+		t.Errorf("1.0.0.1: %q, %v", got, err)
+	}
+	for _, bad := range []string{"10.0.0.1", "127.0.0.1", "169.254.169.254", "::1", "2606:4700:4700::1111", "one.one.one.one", "0.0.0.0"} {
+		if _, err := ParseOutside(bad); err == nil {
+			t.Errorf("%q was accepted", bad)
 		}
 	}
 }
