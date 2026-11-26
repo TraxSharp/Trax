@@ -1334,8 +1334,9 @@ jobs:
     needs: changes
     if: contains(fromJSON(needs.changes.outputs.suite-names), 'egress')
     name: egress
-    # 24.04, as the release's build job: on 26.04 qemu-user-static is a virtual package apt will not install.
-    runs-on: ubuntu-24.04
+    # ubuntu-latest, as the release's build job: on 24.04 a rootless podman 4.9 build cannot resolve names behind
+    # harden-runner, so the image's apk step fails. 26.04 ships qemu as qemu-user-binfmt.
+    runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
       contents: read
@@ -1396,7 +1397,7 @@ jobs:
       - name: Install qemu for the arm64 build
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q --no-install-recommends qemu-user-static
+          sudo apt-get install -y -q --no-install-recommends qemu-user-binfmt
       - name: Build the image for arm64, and run it
         # A release builds linux/amd64 and linux/arm64 into one index. The arm64 half is built here
         # under qemu, the way the release builds it, so a break shows on the pull request and not

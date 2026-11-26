@@ -193,13 +193,19 @@ for a in "$@"; do case "$a" in oci-archive:*) printf archive > "\${a#oci-archive
     it('builds and runs on arm64 in CI too, so an arm64 break shows before a tag is cut', () => {
       const egress = yaml.load(readFileSync(join(dirname(workflowPath), 'ci.yml'), 'utf8')).jobs.egress;
       assert.ok(allowedEndpoints(egress).includes('azure.archive.ubuntu.com:80'));
-      assert.match(step(egress, 'Install qemu for the arm64 build').run, /apt-get install .*qemu-user-static/);
+      assert.match(step(egress, 'Install qemu for the arm64 build').run, /apt-get install .*qemu-user-binfmt/);
       assert.match(step(egress, 'Build the image for arm64, and run it').run, /--platform linux\/arm64/);
+    });
+
+    it('builds the egress image on the same runner image as CI, where podman resolves names behind harden-runner', () => {
+      const egress = yaml.load(readFileSync(join(dirname(workflowPath), 'ci.yml'), 'utf8')).jobs.egress;
+      assert.equal(build['runs-on'], 'ubuntu-latest');
+      assert.equal(egress['runs-on'], build['runs-on']);
     });
 
     it('may reach the Ubuntu archive, for the qemu the arm64 build runs under', () => {
       assert.ok(allowedEndpoints(build).includes('azure.archive.ubuntu.com:80'));
-      assert.match(step(build, 'Install qemu for the arm64 build').run, /apt-get install .*qemu-user-static/);
+      assert.match(step(build, 'Install qemu for the arm64 build').run, /apt-get install .*qemu-user-binfmt/);
       assert.ok(indexOf(build, 'Install qemu for the arm64 build') < indexOf(build, 'Build the egress image'));
     });
   });
