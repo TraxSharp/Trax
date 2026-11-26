@@ -1173,7 +1173,7 @@ public class DeployTailnetTests
         );
         hint.Should()
             .Contain(
-                "test \"$(/usr/bin/podman wait orders-home-drain-pod-drain)\" = 0 && "
+                "test \"$(/usr/bin/podman wait orders-home-drain-pod-drain)\" = 0 && { "
                     + "mv -f /home/u/.config/trax/orders-home/tailnet.next.yaml "
                     + "/home/u/.config/trax/orders-home/tailnet.yaml && systemctl --user restart "
             );
